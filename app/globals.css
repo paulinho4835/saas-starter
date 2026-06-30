@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Sistema de color por variables.
+  - Modo claro: valores históricos (white = blanco, slate = escala normal).
+  - Modo oscuro (.dark): se invierte la escala slate (los tonos bajos pasan a
+    fondos oscuros y los altos a textos claros) y `white` pasa a una superficie
+    elevada. Como las clases (bg-white, text-slate-700, ring-slate-200…) leen
+    estas variables, toda la app cambia de tema sin reescribir utilidades.
+  Los valores son "R G B" separados por espacio para soportar opacidad de Tailwind.
+*/
+:root {
+  --white: 255 255 255;
+  --slate-50: 248 250 252;
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 148 163 184;
+  --slate-500: 100 116 139;
+  --slate-600: 71 85 105;
+  --slate-700: 51 65 85;
+  --slate-800: 30 41 59;
+  --slate-900: 15 23 42;
+  --slate-950: 2 6 23;
+
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+.dark {
+  /* Superficie elevada (tarjetas, modales, sidebar): más clara que el fondo. */
+  --white: 30 41 59; /* #1e293b */
+  /* Escala oscura calibrada (no inversión pura): tonos bajos = fondos/bordes
+     suaves, tonos altos = textos claros. El fondo de página es un slate suave,
+     no negro puro, y hay jerarquía visible fondo → tarjeta → borde. */
+  --slate-50: 15 23 42; /* #0f172a  fondo de página / franjas sutiles */
+  --slate-100: 38 50 68; /* #263244 divisores / hover (sobre la tarjeta) */
+  --slate-200: 51 65 85; /* #334155 bordes / rings de tarjeta */
+  --slate-300: 71 85 105; /* #475569 bordes de inputs */
+  --slate-400: 100 116 139; /* #64748b iconos / placeholder */
+  --slate-500: 148 163 184; /* #94a3b8 texto atenuado */
+  --slate-600: 203 213 225; /* #cbd5e1 texto cuerpo */
+  --slate-700: 226 232 240; /* #e2e8f0 texto fuerte */
+  --slate-800: 241 245 249; /* #f1f5f9 títulos */
+  --slate-900: 248 250 252; /* #f8fafc títulos máx. */
+  --slate-950: 255 255 255;
+
+  --background: #0f172a;
+  --foreground: #e2e8f0;
+}
+
+/* El texto blanco siempre se usa sobre fondos de color (botones, badges,
+   avatares); debe permanecer blanco aunque la escala se invierta. */
+.dark .text-white {
+  color: #fff;
+}
+
+/*
+  Tema claro forzado para páginas públicas (formularios que el usuario final abre
+  desde su celular por un enlace). No tienen selector de tema; si el teléfono está
+  en modo oscuro, algunos controles nativos quedarían con bajo contraste. Esta
+  clase reescribe las variables a sus valores claros en su subárbol. */
+.theme-light {
+  color-scheme: light;
+  --white: 255 255 255;
+  --slate-50: 248 250 252;
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 148 163 184;
+  --slate-500: 100 116 139;
+  --slate-600: 71 85 105;
+  --slate-700: 51 65 85;
+  --slate-800: 30 41 59;
+  --slate-900: 15 23 42;
+  --slate-950: 2 6 23;
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  color: var(--foreground);
+}
+
+/* Al imprimir, forzar tema claro: el papel siempre es blanco. */
+@media print {
+  :root,
+  .dark {
+    --white: 255 255 255;
+    --slate-50: 248 250 252;
+    --slate-100: 241 245 249;
+    --slate-200: 226 232 240;
+    --slate-300: 203 213 225;
+    --slate-400: 148 163 184;
+    --slate-500: 100 116 139;
+    --slate-600: 71 85 105;
+    --slate-700: 51 65 85;
+    --slate-800: 30 41 59;
+    --slate-900: 15 23 42;
+    --slate-950: 2 6 23;
+    --background: #ffffff;
+    --foreground: #0f172a;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+}

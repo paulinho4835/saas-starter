@@ -1,0 +1,16 @@
+-- Seed de ejemplo para desarrollo local (supabase db reset lo ejecuta).
+--
+-- NOTA: los usuarios se crean en auth.users (no aquí). Para un entorno local con
+-- Supabase CLI, crea usuarios desde el Studio (http://localhost:54323) o con la
+-- API admin, y luego inserta su profile. Abajo queda el patrón listo para copiar.
+--
+-- 1) Crea una organización de prueba:
+-- insert into organizations (id, name, features)
+-- values ('00000000-0000-0000-0000-000000000001', 'Organización Demo', '{}'::jsonb);
+--
+-- 2) Tras crear el usuario en auth (toma su UUID), crea su perfil admin:
+-- insert into profiles (id, org_id, full_name, role, terms_accepted_at, terms_accepted_version)
+-- values ('<UUID_DEL_USUARIO>', '00000000-0000-0000-0000-000000000001', 'Admin Demo', 'admin', now(), '2026-01-01');
+--
+-- 3) Para volverlo operador de plataforma (superadmin), añade su UUID:
+-- insert into platform_admins (user_id) values ('<UUID_DEL_USUARIO>');
