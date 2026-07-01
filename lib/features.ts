@@ -1,14 +1,11 @@
 // Catálogo de módulos toggleables por organización (feature flags / addons).
-// MISMO código para todos los clientes; cada organización enciende/apaga estos
-// módulos vía organizations.features (columna jsonb). La fuente de verdad es el jsonb.
-//
-// Para agregar un módulo nuevo a tu SaaS: añade su clave aquí, dale entrada en
-// FEATURES (orden = orden del menú), y permítelo por rol en lib/rbac.ts.
 
 export type FeatureKey =
   | "dashboard"
   | "clientes"
   | "items"
+  | "productos"
+  | "proveedores"
   | "ajustes"
   | "auditoria";
 
@@ -27,14 +24,14 @@ export const FEATURES: FeatureMeta[] = [
   { key: "dashboard", label: "Inicio", href: "/dashboard", core: true },
   { key: "clientes", label: "Clientes", href: "/clientes" },
   { key: "items", label: "Inventario", href: "/items", optIn: true },
+  { key: "productos", label: "Productos", href: "/productos", optIn: true },
+  { key: "proveedores", label: "Proveedores", href: "/proveedores", optIn: true },
   { key: "ajustes", label: "Ajustes", href: "/ajustes", core: true },
   { key: "auditoria", label: "Auditoría", href: "/auditoria", optIn: true },
 ];
 
 export type Features = Record<FeatureKey, boolean>;
 
-// Si una clave falta en el jsonb (cuenta vieja, módulo nuevo), se asume encendida
-// para no romper cuentas existentes al agregar features (salvo las opt-in).
 export function normalizeFeatures(raw: unknown): Features {
   const obj = (raw ?? {}) as Record<string, unknown>;
   const out = {} as Features;

@@ -1,19 +1,22 @@
 import type { FeatureKey } from "@/lib/features";
 
 // Permisos por rol (espejo de las políticas RLS — la DB es la fuente de verdad).
-// Roles genéricos de SaaS multi-tenant. Renómbralos/extiéndelos según tu dominio.
-//   admin   → dueño de la organización: ve y gestiona todo.
-//   manager → gestiona operación y datos, pero no usuarios ni configuración.
-//   member  → opera sus propios datos.
-//   viewer  → solo lectura.
 export type Role = "admin" | "manager" | "member" | "viewer";
 
 // Módulos del menú lateral visibles por rol.
 const NAV_WHITELIST: Record<Role, FeatureKey[]> = {
-  admin: ["dashboard", "clientes", "items", "ajustes", "auditoria"],
-  manager: ["dashboard", "clientes", "items"],
-  member: ["dashboard", "clientes"],
-  viewer: ["dashboard", "clientes"],
+  admin: [
+    "dashboard",
+    "clientes",
+    "items",
+    "productos",
+    "proveedores",
+    "ajustes",
+    "auditoria",
+  ],
+  manager: ["dashboard", "clientes", "items", "productos", "proveedores"],
+  member: ["dashboard", "clientes", "productos", "proveedores"],
+  viewer: ["dashboard", "clientes", "productos", "proveedores"],
 };
 
 export function canSeeNav(role: Role | undefined, key: FeatureKey): boolean {
@@ -26,7 +29,15 @@ type Permission =
   | "clientes:write"
   | "clientes:delete"
   | "items:write"
-  | "settings:write"; // usuarios, roles, organización
+  | "settings:write"
+  | "productos:read"
+  | "productos:write"
+  | "productos:delete"
+  | "productos:import"
+  | "catalogos:write"
+  | "sucursales:write"
+  | "proveedores:read"
+  | "proveedores:write";
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -35,10 +46,28 @@ const MATRIX: Record<Role, Permission[]> = {
     "clientes:delete",
     "items:write",
     "settings:write",
+    "productos:read",
+    "productos:write",
+    "productos:delete",
+    "productos:import",
+    "catalogos:write",
+    "sucursales:write",
+    "proveedores:read",
+    "proveedores:write",
   ],
-  manager: ["clientes:read", "clientes:write", "items:write"],
-  member: ["clientes:read", "clientes:write"],
-  viewer: ["clientes:read"],
+  manager: [
+    "clientes:read",
+    "clientes:write",
+    "items:write",
+    "productos:read",
+    "productos:write",
+    "productos:import",
+    "catalogos:write",
+    "proveedores:read",
+    "proveedores:write",
+  ],
+  member: ["clientes:read", "clientes:write", "productos:read", "proveedores:read"],
+  viewer: ["clientes:read", "productos:read", "proveedores:read"],
 };
 
 export function can(role: Role | undefined, perm: Permission): boolean {
