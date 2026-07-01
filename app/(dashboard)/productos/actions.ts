@@ -224,6 +224,42 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
     return { ok: false, error: "El producto se creó, pero no se pudo registrar el stock." };
   }
 
+  const { error: movementError } = await supabase.from("stock_movements").insert({
+    org_id: profile.orgId,
+    product_id: product.id,
+    branch_id: branchId,
+    movement_type: "alta_inicial",
+    quantity_delta: quantity,
+    resulting_quantity: quantity,
+    reason: null,
+    actor_id: profile.userId,
+    sale_id: null,
+  });
+  if (movementError) {
+    console.error("createProduct movement:", movementError.message);
+    const { error: stockRollbackError } = await supabase
+      .from("product_stock")
+      .delete()
+      .eq("product_id", product.id)
+      .eq("branch_id", branchId);
+    const { error: productRollbackError } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", product.id);
+    if (stockRollbackError || productRollbackError) {
+      console.error(
+        "createProduct rollback failed after movement insert error, orphaned product row:",
+        product.id,
+        stockRollbackError?.message,
+        productRollbackError?.message,
+      );
+    }
+    return {
+      ok: false,
+      error: "El producto se creó, pero no se pudo registrar el historial de stock.",
+    };
+  }
+
   revalidatePath("/productos");
   return { ok: true };
 }
