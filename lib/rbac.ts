@@ -11,11 +11,12 @@ const NAV_WHITELIST: Record<Role, FeatureKey[]> = {
     "items",
     "productos",
     "proveedores",
+    "ventas",
     "ajustes",
     "auditoria",
   ],
-  manager: ["dashboard", "clientes", "items", "productos", "proveedores"],
-  member: ["dashboard", "clientes", "productos", "proveedores"],
+  manager: ["dashboard", "clientes", "items", "productos", "proveedores", "ventas"],
+  member: ["dashboard", "clientes", "productos", "proveedores", "ventas"],
   viewer: ["dashboard", "clientes", "productos", "proveedores"],
 };
 
@@ -37,7 +38,8 @@ type Permission =
   | "catalogos:write"
   | "sucursales:write"
   | "proveedores:read"
-  | "proveedores:write";
+  | "proveedores:write"
+  | "ventas:create";
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -54,6 +56,7 @@ const MATRIX: Record<Role, Permission[]> = {
     "sucursales:write",
     "proveedores:read",
     "proveedores:write",
+    "ventas:create",
   ],
   manager: [
     "clientes:read",
@@ -65,8 +68,15 @@ const MATRIX: Record<Role, Permission[]> = {
     "catalogos:write",
     "proveedores:read",
     "proveedores:write",
+    "ventas:create",
   ],
-  member: ["clientes:read", "clientes:write", "productos:read", "proveedores:read"],
+  member: [
+    "clientes:read",
+    "clientes:write",
+    "productos:read",
+    "proveedores:read",
+    "ventas:create",
+  ],
   viewer: ["clientes:read", "productos:read", "proveedores:read"],
 };
 
