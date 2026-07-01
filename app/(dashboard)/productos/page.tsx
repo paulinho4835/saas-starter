@@ -59,6 +59,14 @@ type ProductRow = {
 const PRODUCT_SELECT =
   "id, code, brand_id, family_id, origin_id, supplier_id, internal_mm, external_mm, height_mm, flange_mm, stop_mm, application, cost_usd, exchange_rate, margin_sf_pct, margin_cf_pct, margin_may_pct, price_sf_bs, price_cf_bs, price_may_bs, product_brands(name), product_families(name)";
 
+// PostgREST treats `,` `.` `(` `)` as syntactically meaningful inside an
+// .or() filter expression (predicate separator, path separator, and group
+// delimiters respectively). Backslash-escape them before interpolating
+// user-supplied search input so it can't inject additional filter clauses.
+function escapePostgrestFilterValue(value: string): string {
+  return value.replace(/[,.()\\]/g, (c) => `\\${c}`);
+}
+
 export default async function ProductosPage({
   searchParams,
 }: {
@@ -111,7 +119,10 @@ export default async function ProductosPage({
       .order("code")
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
 
-    if (q) query = query.or(`code.ilike.%${q}%,application.ilike.%${q}%`);
+    if (q) {
+      const safeQ = escapePostgrestFilterValue(q);
+      query = query.or(`code.ilike.%${safeQ}%,application.ilike.%${safeQ}%`);
+    }
     if (sp.brandId) query = query.eq("brand_id", sp.brandId);
     if (sp.familyId) query = query.eq("family_id", sp.familyId);
 
