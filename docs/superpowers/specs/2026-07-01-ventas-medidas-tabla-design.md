@@ -50,8 +50,12 @@ tabla:
   `TIER_LABEL`), cada una clickeable: el clic llama a `addToCart(product,
   tier)` (misma función que ya existe, sin cambios en su firma ni en la
   lógica del carrito).
-- **Stock** se muestra una sola vez por producto (`rowSpan={3}` en la
-  primera sub-fila), no repetido en las 3.
+- **Código, Marca, Stock y las 5 columnas de medida** se muestran una sola
+  vez por producto (`rowSpan={3}` en la primera sub-fila), no repetidos en
+  las 3 — son iguales para los 3 tiers de precio, solo el precio y el tipo
+  cambian por fila. La aplicación (`p.application`, ya mostrada hoy como
+  texto secundario bajo el código) se conserva dentro de la celda de
+  Código, también con `rowSpan={3}`.
 - Si `stock <= 0`, las 3 sub-filas del producto quedan deshabilitadas
   (mismo criterio que hoy usa el botón `disabled={p.stock <= 0}`), con
   estilo visual atenuado (`opacity-50 cursor-not-allowed`) en vez de
