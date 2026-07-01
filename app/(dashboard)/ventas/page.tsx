@@ -29,12 +29,17 @@ type ProductResultRow = {
   price_sf_bs: number;
   price_cf_bs: number;
   price_may_bs: number;
+  internal_mm: number | null;
+  external_mm: number | null;
+  height_mm: number | null;
+  flange_mm: number | null;
+  stop_mm: number | null;
   product_brands: { name: string } | null;
   product_stock: { quantity: number }[];
 };
 
 const RESULT_SELECT =
-  "id, code, application, price_sf_bs, price_cf_bs, price_may_bs, product_brands(name), product_stock!inner(quantity)";
+  "id, code, application, price_sf_bs, price_cf_bs, price_may_bs, internal_mm, external_mm, height_mm, flange_mm, stop_mm, product_brands(name), product_stock!inner(quantity)";
 
 export default async function VentasPage({
   searchParams,
@@ -111,6 +116,11 @@ export default async function VentasPage({
     priceCfBs: r.price_cf_bs,
     priceMayBs: r.price_may_bs,
     stock: r.product_stock[0]?.quantity ?? 0,
+    internalMm: r.internal_mm,
+    externalMm: r.external_mm,
+    heightMm: r.height_mm,
+    flangeMm: r.flange_mm,
+    stopMm: r.stop_mm,
   }));
 
   return (
