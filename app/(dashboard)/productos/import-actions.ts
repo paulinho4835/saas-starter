@@ -220,7 +220,18 @@ export async function confirmProductImport(
   }
 
   // 2) Upsert de productos por (org_id, code, brand_id).
-  const productsPayload = validRows.map((r) => ({
+  // Un mismo archivo puede traer la misma combinación código+marca repetida
+  // (errores de captura acumulados en inventarios viejos). Postgres rechaza un
+  // upsert cuyo statement afecte la misma fila de conflicto dos veces, así que
+  // deduplicamos por esa llave quedándonos con la última fila del archivo (la
+  // entrada más reciente gana sobre una anterior con el mismo código).
+  const rowByCodeBrand = new Map<string, ParsedImportRow>();
+  for (const r of validRows) {
+    rowByCodeBrand.set(`${r.code}::${brandIdByName.get(r.brand.toLowerCase())}`, r);
+  }
+  const dedupedRows = [...rowByCodeBrand.values()];
+
+  const productsPayload = dedupedRows.map((r) => ({
     org_id: orgId,
     code: r.code,
     brand_id: brandIdByName.get(r.brand.toLowerCase())!,
@@ -237,21 +248,27 @@ export async function confirmProductImport(
     updated_at: new Date().toISOString(),
   }));
 
-  const { data: upsertedProducts, error: productsError } = await supabase
-    .from("products")
-    .upsert(productsPayload, { onConflict: "org_id,code,brand_id" })
-    .select("id, code, brand_id");
-  if (productsError) {
-    console.error("confirmProductImport productos:", productsError.message);
-    return { ok: false, error: "No se pudieron guardar los productos." };
+  // Archivos de miles de filas revientan el proxy local (Kong) o el fetch si se
+  // mandan en un solo upsert — supabase-js lanza en vez de devolver error, y el
+  // import queda colgado. Partir en lotes evita ese límite.
+  const upsertedProducts: { id: string; code: string; brand_id: string }[] = [];
+  for (const productBatch of chunk(productsPayload, IMPORT_BATCH_SIZE)) {
+    const { data, error } = await supabase
+      .from("products")
+      .upsert(productBatch, { onConflict: "org_id,code,brand_id" })
+      .select("id, code, brand_id");
+    if (error) {
+      console.error("confirmProductImport productos:", error.message);
+      return { ok: false, error: "No se pudieron guardar los productos." };
+    }
+    upsertedProducts.push(...(data ?? []));
   }
 
   // 3) Upsert de stock para la sucursal elegida (reemplaza la cantidad existente).
-  const stockPayload = (upsertedProducts ?? []).map((p) => {
-    const row = validRows.find(
-      (r) =>
-        r.code === p.code && brandIdByName.get(r.brand.toLowerCase()) === p.brand_id,
-    )!;
+  // Usa la misma fila ganadora del paso 2 (por code+brand_id) para que el stock
+  // salga de la misma entrada que definió los precios del producto.
+  const stockPayload = upsertedProducts.map((p) => {
+    const row = rowByCodeBrand.get(`${p.code}::${p.brand_id}`)!;
     return {
       org_id: orgId,
       product_id: p.id,

@@ -57,19 +57,24 @@ export function ImportProductsDialog({ branches }: { branches: CatalogOption[] }
   async function onConfirm() {
     if (!preview || !file) return;
     setLoading(true);
-    const formData = new FormData();
-    formData.set("file", file);
-    formData.set("branchId", branchId);
-    const res = await confirmProductImport(formData);
-    setLoading(false);
-    if (!res.ok) {
-      toast(res.error, "error");
-      return;
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      formData.set("branchId", branchId);
+      const res = await confirmProductImport(formData);
+      if (!res.ok) {
+        toast(res.error, "error");
+        return;
+      }
+      toast(`${res.imported} productos importados.`);
+      setOpen(false);
+      reset();
+      router.refresh();
+    } catch {
+      toast("No se pudo completar la importación. Intenta de nuevo.", "error");
+    } finally {
+      setLoading(false);
     }
-    toast(`${res.imported} productos importados.`);
-    setOpen(false);
-    reset();
-    router.refresh();
   }
 
   return (
