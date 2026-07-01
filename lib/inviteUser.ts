@@ -17,6 +17,7 @@ type InviteInput = {
   fullName: string;
   orgId: string;
   role: Role;
+  branchId?: string | null;
 };
 
 type InviteResult = { ok: true; userId: string } | { ok: false; error: string };
@@ -28,7 +29,7 @@ type InviteResult = { ok: true; userId: string } | { ok: false; error: string };
 // borrar la organización recién creada).
 export async function inviteOrgUser(
   admin: ReturnType<typeof createAdminClient>,
-  { email, fullName, orgId, role }: InviteInput,
+  { email, fullName, orgId, role, branchId }: InviteInput,
 ): Promise<InviteResult> {
   const origin = await appOrigin();
 
@@ -49,6 +50,7 @@ export async function inviteOrgUser(
     org_id: orgId,
     role,
     full_name: fullName,
+    branch_id: branchId ?? null,
   });
   if (profErr) {
     await admin.auth.admin.deleteUser(invited.user.id); // rollback
