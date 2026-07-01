@@ -364,6 +364,14 @@ export async function updateProductStock(
     return { ok: false, error: "La sucursal seleccionada no es válida." };
   }
 
+  const { data: existingStock } = await supabase
+    .from("product_stock")
+    .select("quantity")
+    .eq("product_id", productId)
+    .eq("branch_id", branchId)
+    .maybeSingle();
+  const previousQuantity = existingStock?.quantity ?? 0;
+
   const { error } = await supabase.from("product_stock").upsert(
     {
       org_id: profile.orgId,
@@ -377,6 +385,40 @@ export async function updateProductStock(
   if (error) {
     console.error("updateProductStock:", error.message);
     return { ok: false, error: "No se pudo actualizar el stock." };
+  }
+
+  if (quantity !== previousQuantity) {
+    const { error: movementError } = await supabase.from("stock_movements").insert({
+      org_id: profile.orgId,
+      product_id: productId,
+      branch_id: branchId,
+      movement_type: "ajuste_manual",
+      quantity_delta: quantity - previousQuantity,
+      resulting_quantity: quantity,
+      reason: "Editado desde ficha de producto",
+      actor_id: profile.userId,
+      sale_id: null,
+    });
+    if (movementError) {
+      console.error("updateProductStock movement:", movementError.message);
+      if (existingStock) {
+        await supabase
+          .from("product_stock")
+          .update({ quantity: previousQuantity })
+          .eq("product_id", productId)
+          .eq("branch_id", branchId);
+      } else {
+        await supabase
+          .from("product_stock")
+          .delete()
+          .eq("product_id", productId)
+          .eq("branch_id", branchId);
+      }
+      return {
+        ok: false,
+        error: "No se pudo registrar el historial de stock. El cambio fue revertido.",
+      };
+    }
   }
 
   revalidatePath("/productos");
