@@ -204,6 +204,17 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
   });
   if (stockError) {
     console.error("createProduct stock:", stockError.message);
+    const { error: rollbackError } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", product.id);
+    if (rollbackError) {
+      console.error(
+        "createProduct rollback failed, orphaned product row:",
+        product.id,
+        rollbackError.message,
+      );
+    }
     return { ok: false, error: "El producto se creó, pero no se pudo registrar el stock." };
   }
 
