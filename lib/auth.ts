@@ -7,11 +7,12 @@ export interface CurrentProfile {
   orgId: string;
   role: Role;
   fullName: string;
+  branchId: string | null;
 }
 
-// Perfil del usuario autenticado (org_id + rol). Cacheado por request.
+// Perfil del usuario autenticado (org_id + rol + sucursal). Cacheado por request.
 // RLS sigue siendo la fuente de verdad; esto sirve para gates de UI y para
-// rellenar org_id en inserts (defensa en profundidad).
+// rellenar org_id/branch_id en inserts (defensa en profundidad).
 export const getProfile = cache(async (): Promise<CurrentProfile | null> => {
   const supabase = await createClient();
   const {
@@ -21,7 +22,7 @@ export const getProfile = cache(async (): Promise<CurrentProfile | null> => {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id, role, full_name")
+    .select("org_id, role, full_name, branch_id")
     .eq("id", user.id)
     .single();
   if (!profile) return null;
@@ -31,5 +32,6 @@ export const getProfile = cache(async (): Promise<CurrentProfile | null> => {
     orgId: profile.org_id,
     role: profile.role as Role,
     fullName: profile.full_name,
+    branchId: profile.branch_id,
   };
 });
