@@ -13,6 +13,7 @@ const inviteSchema = z.object({
   email: z.string().trim().email("Correo inválido."),
   fullName: z.string().trim().min(1, "El nombre es obligatorio.").max(120),
   role: z.enum(["admin", "manager", "member", "viewer"]),
+  branchId: z.string().trim().optional(),
 });
 
 export type ActionResult = { ok: boolean; error?: string };
@@ -31,6 +32,7 @@ export async function inviteTeamUser(formData: FormData): Promise<ActionResult> 
     email: formData.get("email"),
     fullName: formData.get("fullName"),
     role: formData.get("role"),
+    branchId: formData.get("branchId") || undefined,
   });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
@@ -42,6 +44,7 @@ export async function inviteTeamUser(formData: FormData): Promise<ActionResult> 
     fullName: parsed.data.fullName,
     orgId: profile.orgId,
     role: parsed.data.role as Role,
+    branchId: parsed.data.branchId || null,
   });
   if (!res.ok) return { ok: false, error: res.error };
 
@@ -105,6 +108,34 @@ export async function deleteBranch(id: string): Promise<ActionResult> {
   }
   const res = await deleteCatalogEntry("branches", id);
   if (!res.ok) return res;
+  revalidatePath("/ajustes");
+  return { ok: true };
+}
+
+// Asigna (o quita) la sucursal fija de un vendedor. Solo el admin, y solo
+// dentro de su propia organización (candado `.eq("org_id", ...)`, mismo
+// patrón que setUserActive).
+export async function setUserBranch(
+  userId: string,
+  branchId: string | null,
+): Promise<ActionResult> {
+  const profile = await getProfile();
+  if (!profile) return { ok: false, error: "Sesión no válida." };
+  if (profile.role !== "admin") {
+    return { ok: false, error: "Solo el administrador puede asignar sucursales." };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({ branch_id: branchId })
+    .eq("id", userId)
+    .eq("org_id", profile.orgId);
+  if (error) {
+    console.error("setUserBranch:", error.message);
+    return { ok: false, error: "No se pudo actualizar la sucursal del usuario." };
+  }
+
   revalidatePath("/ajustes");
   return { ok: true };
 }
