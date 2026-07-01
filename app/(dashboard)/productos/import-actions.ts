@@ -33,6 +33,20 @@ async function fileToMatrix(file: File): Promise<unknown[][]> {
   }) as unknown[][];
 }
 
+// Archivos de inventario reales pueden traer miles de filas. Un solo upsert
+// con todo el batch puede exceder límites de tiempo/tamaño del proxy local
+// de Supabase (Kong) o del cliente fetch, fallando con "fetch failed" en vez
+// de un error de datos. Partir en lotes evita ese límite.
+const IMPORT_BATCH_SIZE = 500;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 type ClassifyResult =
   | { ok: true; rows: ImportRowPreview[] }
   | { ok: false; error: string };
@@ -206,7 +220,24 @@ export async function confirmProductImport(
   }
 
   // 2) Upsert de productos por (org_id, code, brand_id).
-  const productsPayload = validRows.map((r) => ({
+  // Un mismo archivo puede traer la misma combinación código+marca repetida
+  // (errores de captura acumulados en inventarios viejos). Postgres rechaza
+  // un upsert cuyo batch afecte la misma fila de conflicto dos veces, así que
+  // deduplicamos por esa llave quedándonos con la última fila del archivo
+  // (la entrada más reciente gana sobre una anterior con el mismo código).
+  const productRowByKey = new Map<string, ParsedImportRow>();
+  for (const r of validRows) {
+    productRowByKey.set(`${r.code}::${r.brand.toLowerCase()}`, r);
+  }
+
+  // Fila deduplicada por code+brand_id, para que el paso 3 (stock) use la
+  // misma fila ganadora sin tener que revertir brand_id a nombre de marca.
+  const rowByCodeAndBrandId = new Map<string, ParsedImportRow>();
+  for (const r of productRowByKey.values()) {
+    rowByCodeAndBrandId.set(`${r.code}::${brandIdByName.get(r.brand.toLowerCase())}`, r);
+  }
+
+  const productsPayload = [...productRowByKey.values()].map((r) => ({
     org_id: orgId,
     code: r.code,
     brand_id: brandIdByName.get(r.brand.toLowerCase())!,
@@ -223,21 +254,24 @@ export async function confirmProductImport(
     updated_at: new Date().toISOString(),
   }));
 
-  const { data: upsertedProducts, error: productsError } = await supabase
-    .from("products")
-    .upsert(productsPayload, { onConflict: "org_id,code,brand_id" })
-    .select("id, code, brand_id");
-  if (productsError) {
-    console.error("confirmProductImport productos:", productsError.message);
-    return { ok: false, error: "No se pudieron guardar los productos." };
+  const upsertedProducts: { id: string; code: string; brand_id: string }[] = [];
+  for (const batch of chunk(productsPayload, IMPORT_BATCH_SIZE)) {
+    const { data, error } = await supabase
+      .from("products")
+      .upsert(batch, { onConflict: "org_id,code,brand_id" })
+      .select("id, code, brand_id");
+    if (error) {
+      console.error("confirmProductImport productos:", error.message);
+      return { ok: false, error: "No se pudieron guardar los productos." };
+    }
+    upsertedProducts.push(...(data ?? []));
   }
 
   // 3) Upsert de stock para la sucursal elegida (reemplaza la cantidad existente).
-  const stockPayload = (upsertedProducts ?? []).map((p) => {
-    const row = validRows.find(
-      (r) =>
-        r.code === p.code && brandIdByName.get(r.brand.toLowerCase()) === p.brand_id,
-    )!;
+  // Usa el mismo mapa deduplicado del paso 2 para que el stock salga de la
+  // misma fila (la más reciente) que definió los precios del producto.
+  const stockPayload = upsertedProducts.map((p) => {
+    const row = rowByCodeAndBrandId.get(`${p.code}::${p.brand_id}`)!;
     return {
       org_id: orgId,
       product_id: p.id,
@@ -247,15 +281,57 @@ export async function confirmProductImport(
     };
   });
 
-  const { error: stockError } = await supabase
-    .from("product_stock")
-    .upsert(stockPayload, { onConflict: "product_id,branch_id" });
-  if (stockError) {
-    console.error("confirmProductImport stock:", stockError.message);
-    return {
-      ok: false,
-      error: "Los productos se guardaron, pero no se pudo actualizar el stock.",
-    };
+  // Cantidades previas por producto, para calcular el delta de cada movimiento
+  // de stock. Un producto sin fila de stock previa en esta sucursal parte de 0.
+  const previousQuantityByProduct = new Map<string, number>();
+  for (const batch of chunk(upsertedProducts.map((p) => p.id), IMPORT_BATCH_SIZE)) {
+    const { data: existingStockRows } = await supabase
+      .from("product_stock")
+      .select("product_id, quantity")
+      .eq("branch_id", branchId)
+      .in("product_id", batch);
+    for (const row of existingStockRows ?? []) {
+      previousQuantityByProduct.set(row.product_id as string, row.quantity as number);
+    }
+  }
+
+  for (const batch of chunk(stockPayload, IMPORT_BATCH_SIZE)) {
+    const { error } = await supabase
+      .from("product_stock")
+      .upsert(batch, { onConflict: "product_id,branch_id" });
+    if (error) {
+      console.error("confirmProductImport stock:", error.message);
+      return {
+        ok: false,
+        error: "Los productos se guardaron, pero no se pudo actualizar el stock.",
+      };
+    }
+
+    // Historial de movimientos: no bloquea el import si falla. Los datos de
+    // stock ya quedaron guardados arriba; revertir miles de filas de producto
+    // por un fallo en el log de auditoría sería peor que perder ese registro,
+    // así que solo se deja constancia en el log del servidor.
+    const movementsPayload = batch
+      .filter((s) => s.quantity !== (previousQuantityByProduct.get(s.product_id) ?? 0))
+      .map((s) => ({
+        org_id: orgId,
+        product_id: s.product_id,
+        branch_id: s.branch_id,
+        movement_type: "importacion" as const,
+        quantity_delta: s.quantity - (previousQuantityByProduct.get(s.product_id) ?? 0),
+        resulting_quantity: s.quantity,
+        reason: null,
+        actor_id: profile.userId,
+        sale_id: null,
+      }));
+    if (movementsPayload.length > 0) {
+      const { error: movementError } = await supabase
+        .from("stock_movements")
+        .insert(movementsPayload);
+      if (movementError) {
+        console.error("confirmProductImport movements:", movementError.message);
+      }
+    }
   }
 
   revalidatePath("/productos");
