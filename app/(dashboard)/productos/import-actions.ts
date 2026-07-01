@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getProfile } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { verifyBranchInOrg } from "@/lib/catalogs";
 import { parseImportRows, type ParsedImportRow } from "@/lib/productImport";
 
 export type ImportRowPreview = ParsedImportRow & {
@@ -32,20 +33,19 @@ async function fileToMatrix(file: File): Promise<unknown[][]> {
   }) as unknown[][];
 }
 
-export async function previewProductImport(
-  formData: FormData,
-): Promise<ImportPreviewResult> {
-  const profile = await getProfile();
-  if (!profile) return { ok: false, error: "Sesión no válida." };
-  if (!can(profile.role, "productos:import")) {
-    return { ok: false, error: "No tienes permiso para importar productos." };
-  }
+type ClassifyResult =
+  | { ok: true; rows: ImportRowPreview[] }
+  | { ok: false; error: string };
 
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, error: "Selecciona un archivo." };
-  }
-
+// Lee el archivo subido, lo parsea con parseImportRows y clasifica cada fila
+// válida como "create" o "update" comparando contra los productos existentes
+// en la org. Usado tanto por previewProductImport (solo para mostrar en UI)
+// como por confirmProductImport (fuente de verdad para lo que se escribe en
+// la DB) — así ambos flujos ven siempre la misma clasificación server-side.
+async function readAndClassifyFile(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  file: File,
+): Promise<ClassifyResult> {
   let matrix: unknown[][];
   try {
     matrix = await fileToMatrix(file);
@@ -65,7 +65,6 @@ export async function previewProductImport(
     return { ok: false, error: "El archivo no tiene filas de datos." };
   }
 
-  const supabase = await createClient();
   const codes = [...new Set(rows.filter((r) => !r.error).map((r) => r.code))];
 
   const { data: existingProducts } =
@@ -91,6 +90,28 @@ export async function previewProductImport(
     return { ...row, status: existingKeys.has(key) ? "update" : "create" };
   });
 
+  return { ok: true, rows: preview };
+}
+
+export async function previewProductImport(
+  formData: FormData,
+): Promise<ImportPreviewResult> {
+  const profile = await getProfile();
+  if (!profile) return { ok: false, error: "Sesión no válida." };
+  if (!can(profile.role, "productos:import")) {
+    return { ok: false, error: "No tienes permiso para importar productos." };
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Selecciona un archivo." };
+  }
+
+  const supabase = await createClient();
+  const classified = await readAndClassifyFile(supabase, file);
+  if (!classified.ok) return classified;
+
+  const preview = classified.rows;
   return {
     ok: true,
     rows: preview,
@@ -105,23 +126,42 @@ export type ConfirmImportResult =
   | { ok: false; error: string };
 
 export async function confirmProductImport(
-  branchId: string,
-  rows: ImportRowPreview[],
+  formData: FormData,
 ): Promise<ConfirmImportResult> {
   const profile = await getProfile();
   if (!profile) return { ok: false, error: "Sesión no válida." };
   if (!can(profile.role, "productos:import")) {
     return { ok: false, error: "No tienes permiso para importar productos." };
   }
-  if (!branchId) return { ok: false, error: "Selecciona una sucursal." };
 
-  const validRows = rows.filter((r) => r.status !== "error");
-  if (validRows.length === 0) {
-    return { ok: false, error: "No hay filas válidas para importar." };
+  const branchId = formData.get("branchId");
+  if (typeof branchId !== "string" || !branchId) {
+    return { ok: false, error: "Selecciona una sucursal." };
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Selecciona un archivo." };
   }
 
   const supabase = await createClient();
   const orgId = profile.orgId;
+
+  const branchValid = await verifyBranchInOrg(supabase, branchId, orgId);
+  if (!branchValid) {
+    return { ok: false, error: "La sucursal seleccionada no es válida." };
+  }
+
+  // Re-parsear y re-clasificar el archivo server-side: nunca confiar en filas
+  // que el cliente pudiera haber alterado (ej. cambiar status "error" a
+  // "create", o inventar code/brand/family/precios/stock).
+  const classified = await readAndClassifyFile(supabase, file);
+  if (!classified.ok) return classified;
+
+  const validRows = classified.rows.filter((r) => r.status !== "error");
+  if (validRows.length === 0) {
+    return { ok: false, error: "No hay filas válidas para importar." };
+  }
 
   // 1) Autocrear marcas y familias que falten.
   const familyNames = [...new Set(validRows.map((r) => r.family))];

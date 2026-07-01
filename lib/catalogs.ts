@@ -49,3 +49,21 @@ export async function deleteCatalogEntry(
   }
   return { ok: true };
 }
+
+// Verifica que una sucursal pertenezca a la org del usuario antes de usarla
+// en escrituras de product_stock. `branches` no tiene una FK/RLS que ate
+// product_stock.branch_id a la misma org, así que este chequeo es la única
+// barrera contra un branchId ajeno colado desde el cliente.
+export async function verifyBranchInOrg(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  branchId: string,
+  orgId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("branches")
+    .select("id")
+    .eq("id", branchId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  return !!data;
+}

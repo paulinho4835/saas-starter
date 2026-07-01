@@ -10,6 +10,7 @@ import {
   insertCatalogEntry,
   deleteCatalogEntry,
   catalogNameSchema,
+  verifyBranchInOrg,
 } from "@/lib/catalogs";
 
 export type ActionResult = { ok: boolean; error?: string };
@@ -153,6 +154,12 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
     return { ok: false, error: "La cantidad debe ser un número mayor o igual a 0." };
   }
 
+  const supabase = await createClient();
+  const branchValid = await verifyBranchInOrg(supabase, branchId, profile.orgId);
+  if (!branchValid) {
+    return { ok: false, error: "La sucursal seleccionada no es válida." };
+  }
+
   const prices = calculatePrices({
     costUsd: parsed.data.cost_usd,
     exchangeRate: parsed.data.exchange_rate,
@@ -161,7 +168,6 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
     marginMayPct: parsed.data.margin_may_pct,
   });
 
-  const supabase = await createClient();
   const { data: product, error } = await supabase
     .from("products")
     .insert({
@@ -317,6 +323,11 @@ export async function updateProductStock(
   }
 
   const supabase = await createClient();
+  const branchValid = await verifyBranchInOrg(supabase, branchId, profile.orgId);
+  if (!branchValid) {
+    return { ok: false, error: "La sucursal seleccionada no es válida." };
+  }
+
   const { error } = await supabase.from("product_stock").upsert(
     {
       org_id: profile.orgId,

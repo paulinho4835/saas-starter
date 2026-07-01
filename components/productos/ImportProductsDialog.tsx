@@ -55,9 +55,12 @@ export function ImportProductsDialog({ branches }: { branches: CatalogOption[] }
   }
 
   async function onConfirm() {
-    if (!preview) return;
+    if (!preview || !file) return;
     setLoading(true);
-    const res = await confirmProductImport(branchId, preview.rows);
+    const formData = new FormData();
+    formData.set("file", file);
+    formData.set("branchId", branchId);
+    const res = await confirmProductImport(formData);
     setLoading(false);
     if (!res.ok) {
       toast(res.error, "error");
