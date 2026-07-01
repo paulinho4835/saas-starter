@@ -8,14 +8,17 @@ import { Field, FieldLabel, fieldInputClass } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { toast } from "@/lib/toast";
 import { confirm } from "@/lib/confirm";
-import { inviteTeamUser, setUserActive } from "@/app/(dashboard)/ajustes/actions";
+import { inviteTeamUser, setUserActive, setUserBranch } from "@/app/(dashboard)/ajustes/actions";
 
 export type TeamMember = {
   id: string;
   full_name: string;
   role: string;
   active: boolean;
+  branch_id: string | null;
 };
+
+type BranchOption = { id: string; name: string };
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Administrador",
@@ -27,9 +30,11 @@ const ROLE_LABEL: Record<string, string> = {
 export function TeamPanel({
   members,
   currentUserId,
+  branches,
 }: {
   members: TeamMember[];
   currentUserId: string;
+  branches: BranchOption[];
 }) {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -86,6 +91,17 @@ export function TeamPanel({
               <option value="viewer">Lectura</option>
             </select>
           </label>
+          <label className="block text-sm">
+            <FieldLabel>Sucursal (opcional)</FieldLabel>
+            <select name="branchId" className={fieldInputClass} defaultValue="">
+              <option value="">— Sin asignar —</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="flex items-end">
             <Button type="submit" disabled={loading} className="w-full">
               {loading ? "Enviando…" : "Enviar invitación"}
@@ -113,6 +129,7 @@ export function TeamPanel({
                 </p>
               </div>
               <div className="flex items-center gap-3">
+                <MemberBranchEditor member={m} branches={branches} />
                 {!m.active && <Badge tone="danger">Inactivo</Badge>}
                 {m.id !== currentUserId && (
                   <Button
@@ -128,6 +145,54 @@ export function TeamPanel({
           ))}
         </ul>
       </Card>
+    </div>
+  );
+}
+
+function MemberBranchEditor({
+  member,
+  branches,
+}: {
+  member: TeamMember;
+  branches: BranchOption[];
+}) {
+  const [branchId, setBranchId] = useState(member.branch_id ?? "");
+  const [saving, setSaving] = useState(false);
+  const router = useRouter();
+
+  async function save() {
+    setSaving(true);
+    const res = await setUserBranch(member.id, branchId || null);
+    setSaving(false);
+    if (!res.ok) {
+      toast(res.error ?? "No se pudo actualizar la sucursal.", "error");
+      return;
+    }
+    toast("Sucursal actualizada.");
+    router.refresh();
+  }
+
+  const changed = branchId !== (member.branch_id ?? "");
+
+  return (
+    <div className="flex items-center gap-2">
+      <select
+        value={branchId}
+        onChange={(e) => setBranchId(e.target.value)}
+        className={`${fieldInputClass} w-40`}
+      >
+        <option value="">— Sin asignar —</option>
+        {branches.map((b) => (
+          <option key={b.id} value={b.id}>
+            {b.name}
+          </option>
+        ))}
+      </select>
+      {changed && (
+        <Button size="sm" variant="secondary" disabled={saving} onClick={save}>
+          Guardar
+        </Button>
+      )}
     </div>
   );
 }

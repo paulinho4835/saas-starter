@@ -17,7 +17,7 @@ export default async function AjustesPage() {
   const [{ data: membersData }, { data: branchesData }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, role, active")
+      .select("id, full_name, role, active, branch_id")
       .eq("org_id", profile.orgId)
       .order("full_name"),
     supabase.from("branches").select("id, name").order("name"),
@@ -28,7 +28,7 @@ export default async function AjustesPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Ajustes" subtitle="Equipo de la organización" />
-      <TeamPanel members={members} currentUserId={profile.userId} />
+      <TeamPanel members={members} currentUserId={profile.userId} branches={branches} />
 
       <div>
         <h2 className="mb-3 font-semibold text-slate-800">Sucursales</h2>
