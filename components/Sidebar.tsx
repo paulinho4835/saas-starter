@@ -9,6 +9,8 @@ import {
   Settings,
   ShieldCheck,
   Shield,
+  Wrench,
+  Truck,
   Menu,
   X,
   type LucideIcon,
@@ -24,6 +26,8 @@ const ICONS: Record<string, LucideIcon> = {
   "/dashboard": Home,
   "/clientes": Users,
   "/items": Package,
+  "/productos": Wrench,
+  "/proveedores": Truck,
   "/ajustes": Settings,
   "/auditoria": ShieldCheck,
 };
