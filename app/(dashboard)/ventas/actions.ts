@@ -169,6 +169,32 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
     return { ok: false, error: "No se pudo registrar la venta. Tu stock no fue afectado." };
   }
 
+  // 4) Historial de movimientos: una fila por línea vendida, ligada a la venta.
+  const movementsPayload = parsed.data.items.map((item) => {
+    const original = stockByProduct.get(item.productId)!;
+    return {
+      org_id: orgId,
+      product_id: item.productId,
+      branch_id: branchId,
+      movement_type: "venta" as const,
+      quantity_delta: -item.quantity,
+      resulting_quantity: original - item.quantity,
+      reason: null,
+      actor_id: profile.userId,
+      sale_id: sale.id,
+    };
+  });
+  const { error: movementsError } = await supabase
+    .from("stock_movements")
+    .insert(movementsPayload);
+  if (movementsError) {
+    await supabase.from("sale_items").delete().eq("sale_id", sale.id);
+    await supabase.from("sales").delete().eq("id", sale.id);
+    await revertDecrements();
+    console.error("createSale movements:", movementsError.message);
+    return { ok: false, error: "No se pudo registrar la venta. Tu stock no fue afectado." };
+  }
+
   revalidatePath("/ventas");
   return { ok: true, saleId: sale.id, total };
 }
