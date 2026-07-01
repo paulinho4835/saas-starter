@@ -79,14 +79,17 @@ pantalla simple de navegar y evita el estado extra de "pestaña activa":
   adjustStock(productId: string, branchId: string, delta: number, reason: string)
   ```
 
-  - `branchId` se valida contra `getProfile()` si el usuario tiene sucursal fija
-    (no se confía en el valor del cliente); si el rol tiene acceso a todas las
-    sucursales, se acepta el `branchId` recibido pero se verifica que pertenezca
-    al `org_id` del perfil.
-  - Reduce usa locking optimista igual que `createSale`:
-    `.update({ quantity: newQty }).eq("product_id", ...).eq("branch_id", ...).eq("quantity", currentQuantity)`
-    — si la fila afectada es 0, se relee el stock actual y se reintenta una vez;
-    si vuelve a fallar, error claro ("El stock cambió, intenta de nuevo").
+  - `branchId` se verifica con `verifyBranchInOrg` (mismo helper que ya usan
+    `createProduct`/`updateProductStock`) contra el `org_id` del perfil — el
+    permiso `productos:write` es de admin/manager, roles que no están atados a
+    una sola sucursal (a diferencia de `ventas:create`), así que no hace falta
+    la restricción adicional de sucursal fija que sí aplica en `/ventas`.
+  - Usa locking optimista igual que `createSale` (tanto para Agregar como para
+    Reducir): `.update({ quantity: newQty }).eq("product_id", ...).eq("branch_id", ...).eq("quantity", currentQuantity)`
+    — si la fila afectada es 0 (otro cambio de stock ocurrió entre la lectura y
+    la escritura), error claro y el usuario reintenta manualmente ("El stock
+    cambió, intenta de nuevo"), sin reintento automático — mismo comportamiento
+    que `createSale` ante un conflicto de stock.
   - Bloquea si el resultado sería negativo (mensaje: "No puedes reducir más stock
     del disponible").
   - Inserta la fila en `stock_movements` con `movement_type='ajuste_manual'`,
@@ -113,24 +116,29 @@ pantalla simple de navegar y evita el estado extra de "pestaña activa":
   página como para ejecutar `adjustStock` — ver el historial y hacer ajustes
   quedan bajo el mismo gate, sin permiso de solo-lectura separado (YAGNI: nadie
   pidió un rol viewer para este módulo).
-- **Feature flag:** reutiliza el flag existente `productos` (no se introduce uno
-  nuevo) — el módulo es una extensión natural de la gestión de productos y ya
-  comparte los mismos datos base (`products`, `product_stock`, `branches`).
-- **Nav:** nuevo item `ajuste-inventario` en `NAV_WHITELIST` para `admin` y
-  `manager` únicamente (mismos roles que ven `productos:write`), gateado también
-  por `canSeeNav` + el flag `productos` vía `requireNavAccess`, igual que
-  `/ventas`.
+- **Feature flag:** en `lib/features.ts`, `FeatureKey` y `NAV_WHITELIST` son 1:1
+  por página — no existe mecanismo para que una página herede el flag de otra
+  (confirmado leyendo `lib/guard.ts::requireNavAccess`, que exige `features[key]`
+  con `key: FeatureKey` exacto). Se introduce un nuevo `FeatureKey`
+  `ajuste_inventario` (`optIn: true`, apagado por defecto), siguiendo exactamente
+  el mismo patrón que `ventas` en Fase 2 — no una excepción al estilo del
+  proyecto, sino su continuación.
+- **Nav:** nuevo item `ajuste_inventario` en `NAV_WHITELIST` para `admin` y
+  `manager` únicamente (mismos roles que tienen `productos:write`), gateado por
+  `canSeeNav` + el nuevo flag vía `requireNavAccess("ajuste_inventario")`, igual
+  que `/ventas`.
 
 ## Testing
 
-- Unit tests para `adjustStock`: reduce exitosa, reduce bloqueada por stock
-  insuficiente, reduce con conflicto de locking optimista (reintento), agregar
-  exitoso, reversión si falla la inserción del movimiento.
-- Unit tests para los 4 puntos de retrofit: cada uno debe producir exactamente
-  una fila de `stock_movements` con el `movement_type` correcto (o N filas para
-  importación masiva, una por producto).
-- Test de integración liviano para el filtro combinado del historial (producto +
-  sucursal + tipo + rango de fechas).
+Mismo criterio que Fase 1/Fase 2: las funciones puras (`lib/stockMovements.ts`)
+llevan unit tests con Vitest. Los server actions que tocan Supabase
+(`adjustStock`, y los 4 puntos de retrofit) **no** tienen tests automatizados
+en este codebase — ninguna acción existente los tiene (`createSale`,
+`createProduct`, etc. se verifican solo manualmente) — así que este módulo
+sigue el mismo patrón: se verifican con un walkthrough manual end-to-end
+(igual que el Task 14 de Fase 2), cubriendo agregar, reducir, bloqueo por
+stock insuficiente, conflicto de locking, y que cada uno de los 4 puntos de
+retrofit efectivamente deja su fila en `stock_movements`.
 
 ## Fuera de alcance (explícitamente)
 
