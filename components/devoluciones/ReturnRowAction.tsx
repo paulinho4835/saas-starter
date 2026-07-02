@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
 import { toast } from "@/lib/toast";
+import { confirm } from "@/lib/confirm";
 import { createReturn } from "@/app/(dashboard)/devoluciones/actions";
 
 export function ReturnRowAction({ saleItemId, max }: { saleItemId: string; max: number }) {
@@ -14,6 +15,13 @@ export function ReturnRowAction({ saleItemId, max }: { saleItemId: string; max: 
 
   async function onReturn() {
     const qty = Number(quantity);
+    const ok = await confirm({
+      title: "Confirmar devolución",
+      message: `¿Devolver ${qty} unidad(es)? Se repondrá el stock y se descontará el monto del total de la venta. Esta acción no se puede deshacer.`,
+      tone: "danger",
+      confirmText: "Devolver",
+    });
+    if (!ok) return;
     setLoading(true);
     const res = await createReturn(saleItemId, qty);
     setLoading(false);
