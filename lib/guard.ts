@@ -11,9 +11,11 @@ export async function requireFeature(key: FeatureKey) {
   if (!features[key]) redirect("/dashboard");
 }
 
-// Verifica feature habilitada Y que el rol del usuario pueda ver ese módulo.
+// Verifica feature habilitada Y que el rol/override del usuario pueda ver ese módulo.
 // Usar en lugar de requireFeature() para módulos con restricción por rol.
 export async function requireNavAccess(key: FeatureKey) {
   const [features, profile] = await Promise.all([getOrgFeatures(), getProfile()]);
-  if (!features[key] || !canSeeNav(profile?.role, key)) redirect("/dashboard");
+  if (!features[key] || !canSeeNav(profile?.role, key, profile?.allowedModules)) {
+    redirect("/dashboard");
+  }
 }
