@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Pin, PinOff } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
@@ -9,6 +10,13 @@ import { toast } from "@/lib/toast";
 import { calculateLineSubtotal, calculateSaleTotal } from "@/lib/sales";
 import { SALE_TYPES, SALE_TYPE_LABEL, priceTierForSaleType, type SaleType } from "@/lib/saleType";
 import { createSale } from "@/app/(dashboard)/ventas/actions";
+
+// Anclados: personales por navegador (no por org), para recordar rápido
+// "cuál repuesto era" cuando un cliente vuelve después de un tiempo. Guarda
+// una foto del producto al momento de anclar — precio/stock pueden quedar
+// desactualizados si no aparece en la búsqueda actual, pero el server
+// siempre revalida stock real al confirmar la venta.
+const PINNED_STORAGE_KEY = "ventas:pinnedProducts";
 
 type ProductResult = {
   id: string;
@@ -57,7 +65,33 @@ export function SalePanel({
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customerId, setCustomerId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pinned, setPinned] = useState<ProductResult[]>([]);
   const router = useRouter();
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(PINNED_STORAGE_KEY);
+      if (raw) setPinned(JSON.parse(raw));
+    } catch {
+      // localStorage corrupto o bloqueado: seguir sin anclados.
+    }
+  }, []);
+
+  function togglePin(product: ProductResult) {
+    setPinned((prev) => {
+      const next = prev.some((p) => p.id === product.id)
+        ? prev.filter((p) => p.id !== product.id)
+        : [...prev, product];
+      try {
+        window.localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // Si no se puede guardar, igual se refleja en la sesión actual.
+      }
+      return next;
+    });
+  }
+
+  const pinnedIds = new Set(pinned.map((p) => p.id));
 
   function addToCart(product: ProductResult) {
     setCart((prev) => [
@@ -144,10 +178,43 @@ export function SalePanel({
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
-      <Card className="max-h-[75vh] overflow-auto lg:col-span-2">
+      <div className="space-y-3 lg:col-span-2">
+        {pinned.length > 0 && (
+          <Card className="p-3">
+            <div className="flex flex-wrap gap-2">
+              {pinned.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 py-1 pl-3 pr-1 text-xs"
+                >
+                  <span className="font-medium text-slate-800">{p.code}</span>
+                  <span className="text-slate-500">{priceForSaleType(p, saleType)} Bs</span>
+                  <button
+                    type="button"
+                    onClick={() => addToCart(p)}
+                    className="rounded-full bg-brand-600 px-2 py-0.5 font-medium text-white hover:bg-brand-700"
+                  >
+                    Agregar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => togglePin(p)}
+                    className="rounded-full p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                    title="Desanclar"
+                  >
+                    <PinOff className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        <Card className="max-h-[75vh] overflow-auto">
         <table className="w-full min-w-[720px] text-sm">
           <thead className="sticky top-0 z-10 bg-white">
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+              <th className="px-3 py-2"></th>
               <th className="px-3 py-2">Código</th>
               <th className="px-3 py-2">Marca</th>
               <th className="px-3 py-2">Stock</th>
@@ -171,6 +238,16 @@ export function SalePanel({
                   key={p.id}
                   className={`border-b border-slate-100 ${outOfStock ? "opacity-50" : ""}`}
                 >
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => togglePin(p)}
+                      className={`rounded p-1 hover:bg-slate-100 ${pinnedIds.has(p.id) ? "text-brand-600" : "text-slate-300"}`}
+                      title={pinnedIds.has(p.id) ? "Desanclar" : "Anclar"}
+                    >
+                      {pinnedIds.has(p.id) ? <Pin className="h-4 w-4 fill-current" /> : <Pin className="h-4 w-4" />}
+                    </button>
+                  </td>
                   <td className="px-3 py-2">
                     <p className="font-medium text-slate-800">{p.code}</p>
                     <p className="text-xs text-slate-500">{p.application || "—"}</p>
@@ -212,7 +289,8 @@ export function SalePanel({
             })}
           </tbody>
         </table>
-      </Card>
+        </Card>
+      </div>
 
       <Card className="h-fit space-y-4 p-4">
         <h3 className="font-semibold text-slate-800">Carrito</h3>
