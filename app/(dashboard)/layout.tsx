@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { FEATURES, normalizeFeatures } from "@/lib/features";
 import { isPlatformAdmin } from "@/lib/superadmin";
 import { canSeeNav, type Role } from "@/lib/rbac";
+import type { AssignableModuleKey } from "@/lib/features";
 import { Sidebar } from "@/components/Sidebar";
 import { Toaster } from "@/components/ui/toaster";
 import { ConfirmHost } from "@/components/ui/ConfirmHost";
@@ -24,7 +25,7 @@ export default async function DashboardLayout({
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "full_name, role, active, terms_accepted_at, terms_accepted_version, organizations(name, features, active)",
+      "full_name, role, active, terms_accepted_at, terms_accepted_version, allowed_modules, organizations(name, features, active)",
     )
     .eq("id", user.id)
     .single();
@@ -93,16 +94,20 @@ export default async function DashboardLayout({
 
   const orgName = superadmin && !isPreview ? "Plataforma" : org?.name ?? "Organización";
 
-  // Menú = módulos encendidos de la organización Y permitidos para el rol.
+  // Menú = módulos encendidos de la organización Y permitidos para el rol Y
+  // (si existe) el override de visibilidad del usuario.
   const features = normalizeFeatures(org?.features);
   const role = profile?.role as Role | undefined;
+  const allowedModules =
+    (profile as { allowed_modules?: AssignableModuleKey[] | null } | null)
+      ?.allowed_modules ?? null;
 
   const nav =
     superadmin && !isPreview
       ? []
-      : FEATURES.filter((f) => features[f.key] && canSeeNav(role, f.key)).map(
-          (f) => ({ href: f.href, label: f.label }),
-        );
+      : FEATURES.filter(
+          (f) => features[f.key] && canSeeNav(role, f.key, allowedModules),
+        ).map((f) => ({ href: f.href, label: f.label }));
 
   const initials =
     !superadmin && profile?.full_name ? getInitials(profile.full_name) : null;
