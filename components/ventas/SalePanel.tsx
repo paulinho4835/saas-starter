@@ -151,7 +151,16 @@ export function SalePanel({
               <th className="px-3 py-2">Código</th>
               <th className="px-3 py-2">Marca</th>
               <th className="px-3 py-2">Stock</th>
-              <th className="px-3 py-2">Precio (Bs)</th>
+              <th className={`px-3 py-2 ${priceTierForSaleType(saleType) === "sf" ? "text-brand-700" : ""}`}>
+                SF
+              </th>
+              <th className={`px-3 py-2 ${priceTierForSaleType(saleType) === "cf" ? "text-brand-700" : ""}`}>
+                CF
+              </th>
+              <th className={`px-3 py-2 ${priceTierForSaleType(saleType) === "may" ? "text-brand-700" : ""}`}>
+                MAY
+              </th>
+              <th className="px-3 py-2"></th>
               <th className="px-3 py-2">MI</th>
               <th className="px-3 py-2">ME</th>
               <th className="px-3 py-2">ALT</th>
@@ -162,6 +171,7 @@ export function SalePanel({
           <tbody>
             {products.map((p) => {
               const outOfStock = p.stock <= 0;
+              const activeTier = priceTierForSaleType(saleType);
               return (
                 <tr
                   key={p.id}
@@ -173,14 +183,23 @@ export function SalePanel({
                   </td>
                   <td className="px-3 py-2">{p.brandName}</td>
                   <td className={`px-3 py-2 ${outOfStock ? "text-red-500" : ""}`}>{p.stock}</td>
+                  <td className={`px-3 py-2 ${activeTier === "sf" ? "font-semibold text-slate-800" : "text-slate-500"}`}>
+                    {p.priceSfBs}
+                  </td>
+                  <td className={`px-3 py-2 ${activeTier === "cf" ? "font-semibold text-slate-800" : "text-slate-500"}`}>
+                    {p.priceCfBs}
+                  </td>
+                  <td className={`px-3 py-2 ${activeTier === "may" ? "font-semibold text-slate-800" : "text-slate-500"}`}>
+                    {p.priceMayBs}
+                  </td>
                   <td className="px-3 py-2">
                     <button
                       type="button"
                       disabled={outOfStock}
                       onClick={() => addToCart(p)}
-                      className="rounded px-2 py-1 font-medium text-brand-700 hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-transparent"
+                      className="rounded bg-brand-50 px-2 py-1 font-medium text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-slate-400"
                     >
-                      {priceForSaleType(p, saleType)}
+                      Agregar
                     </button>
                   </td>
                   <td className="px-3 py-2">{formatMm(p.internalMm)}</td>

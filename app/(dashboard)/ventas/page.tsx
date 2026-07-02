@@ -71,6 +71,15 @@ export default async function VentasPage({
   const brands = brandsData ?? [];
   const customers = customersData ?? [];
 
+  // Si hay algún filtro de medida activo, se prioriza la cercanía al valor
+  // buscado (no un orden ascendente crudo, que entierra la coincidencia
+  // exacta detrás de valores menores dentro del rango de tolerancia) — para
+  // eso se trae un lote más grande y se reordena en JS antes de recortar a
+  // RESULT_LIMIT. Sin filtro de medida, se mantiene el orden correlativo
+  // ascendente de siempre (navegación general del catálogo).
+  const RESULT_LIMIT = 50;
+  const hasMeasurementFilter = Boolean(sp.mi || sp.me || sp.alt || sp.pest || sp.tope);
+
   let query = supabase
     .from("products")
     .select(RESULT_SELECT)
@@ -80,7 +89,7 @@ export default async function VentasPage({
     .order("height_mm", { nullsFirst: false })
     .order("flange_mm", { nullsFirst: false })
     .order("code")
-    .limit(50);
+    .limit(hasMeasurementFilter ? RESULT_LIMIT * 4 : RESULT_LIMIT);
 
   if (sp.code) query = query.ilike("code", `%${escapePostgrestFilterValue(sp.code)}%`);
   if (sp.application)
@@ -108,7 +117,28 @@ export default async function VentasPage({
   }
 
   const { data } = await query;
-  const rows = (data ?? []) as unknown as ProductResultRow[];
+  let rows = (data ?? []) as unknown as ProductResultRow[];
+
+  if (hasMeasurementFilter) {
+    const targetMi = sp.mi ? Number(sp.mi) : null;
+    const targetMe = sp.me ? Number(sp.me) : null;
+    const targetAlt = sp.alt ? Number(sp.alt) : null;
+    const targetPest = sp.pest ? Number(sp.pest) : null;
+    const targetTope = sp.tope ? Number(sp.tope) : null;
+
+    function distance(row: ProductResultRow): number {
+      let total = 0;
+      if (targetMi !== null) total += Math.abs((row.internal_mm ?? targetMi) - targetMi);
+      if (targetMe !== null) total += Math.abs((row.external_mm ?? targetMe) - targetMe);
+      if (targetAlt !== null) total += Math.abs((row.height_mm ?? targetAlt) - targetAlt);
+      if (targetPest !== null) total += Math.abs((row.flange_mm ?? targetPest) - targetPest);
+      if (targetTope !== null) total += Math.abs((row.stop_mm ?? targetTope) - targetTope);
+      return total;
+    }
+
+    rows = [...rows].sort((a, b) => distance(a) - distance(b)).slice(0, RESULT_LIMIT);
+  }
+
   const products = rows.map((r) => ({
     id: r.id,
     code: r.code,
