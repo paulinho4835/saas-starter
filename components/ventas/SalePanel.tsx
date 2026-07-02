@@ -56,14 +56,13 @@ function priceForSaleType(product: ProductResult, saleType: SaleType): number {
 
 export function SalePanel({
   products,
-  customers,
 }: {
   products: ProductResult[];
-  customers: { id: string; full_name: string }[];
 }) {
   const [saleType, setSaleType] = useState<SaleType>("sin_factura");
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [customerId, setCustomerId] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerNit, setCustomerNit] = useState("");
   const [loading, setLoading] = useState(false);
   const [pinned, setPinned] = useState<ProductResult[]>([]);
   const router = useRouter();
@@ -152,7 +151,8 @@ export function SalePanel({
 
     setLoading(true);
     const formData = new FormData();
-    if (customerId) formData.set("customerId", customerId);
+    if (customerName) formData.set("customerName", customerName);
+    if (customerNit) formData.set("customerNit", customerNit);
     formData.set("saleType", saleType);
     formData.set(
       "items",
@@ -172,7 +172,8 @@ export function SalePanel({
     }
     toast(`Venta registrada: ${res.total} Bs.`);
     setCart([]);
-    setCustomerId("");
+    setCustomerName("");
+    setCustomerNit("");
     router.refresh();
   }
 
@@ -311,19 +312,24 @@ export function SalePanel({
         </label>
 
         <label className="block text-sm">
-          <span className="mb-1 block text-slate-600">Cliente (opcional)</span>
-          <select
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
+          <span className="mb-1 block text-slate-600">Nombre del cliente (opcional)</span>
+          <input
+            type="text"
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+            placeholder="Venta de mostrador"
             className={fieldInputClass}
-          >
-            <option value="">Venta de mostrador</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.full_name}
-              </option>
-            ))}
-          </select>
+          />
+        </label>
+
+        <label className="block text-sm">
+          <span className="mb-1 block text-slate-600">NIT (opcional)</span>
+          <input
+            type="text"
+            value={customerNit}
+            onChange={(e) => setCustomerNit(e.target.value)}
+            className={fieldInputClass}
+          />
         </label>
 
         {cart.length === 0 ? (
