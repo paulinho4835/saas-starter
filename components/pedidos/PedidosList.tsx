@@ -10,12 +10,22 @@ export type PedidoRow = {
   application: string | null;
   branch: string | null;
   quantity: number;
+  internalMm: number | null;
+  externalMm: number | null;
+  heightMm: number | null;
+  flangeMm: number | null;
+  stopMm: number | null;
 };
 
 export type PedidoGroup = {
   supplier: string;
   rows: PedidoRow[];
 };
+
+function formatMm(value: number | null): string {
+  if (value === null) return "—";
+  return String(Number(value.toFixed(2)));
+}
 
 export function PedidosList({ groups }: { groups: PedidoGroup[] }) {
   const allKeys = groups.flatMap((g) => g.rows.map((r) => r.key));
@@ -83,6 +93,11 @@ export function PedidosList({ groups }: { groups: PedidoGroup[] }) {
                   <th className="px-4 py-2">Aplicación</th>
                   <th className="px-4 py-2">Sucursal</th>
                   <th className="px-4 py-2 text-right">Stock</th>
+                  <th className="px-4 py-2">MI</th>
+                  <th className="px-4 py-2">ME</th>
+                  <th className="px-4 py-2">ALT</th>
+                  <th className="px-4 py-2">PEST</th>
+                  <th className="px-4 py-2">TOPE</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -102,6 +117,11 @@ export function PedidosList({ groups }: { groups: PedidoGroup[] }) {
                       <td className="px-4 py-2 text-slate-500">{row.application ?? "—"}</td>
                       <td className="px-4 py-2 text-slate-500">{row.branch ?? "—"}</td>
                       <td className="px-4 py-2 text-right font-semibold text-red-600">{row.quantity}</td>
+                      <td className="px-4 py-2 text-slate-500">{formatMm(row.internalMm)}</td>
+                      <td className="px-4 py-2 text-slate-500">{formatMm(row.externalMm)}</td>
+                      <td className="px-4 py-2 text-slate-500">{formatMm(row.heightMm)}</td>
+                      <td className="px-4 py-2 text-slate-500">{formatMm(row.flangeMm)}</td>
+                      <td className="px-4 py-2 text-slate-500">{formatMm(row.stopMm)}</td>
                     </tr>
                   );
                 })}

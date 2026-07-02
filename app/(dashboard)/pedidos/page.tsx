@@ -26,11 +26,16 @@ type StockRow = {
     application: string | null;
     product_brands: { name: string } | null;
     suppliers: { name: string } | null;
+    internal_mm: number | null;
+    external_mm: number | null;
+    height_mm: number | null;
+    flange_mm: number | null;
+    stop_mm: number | null;
   } | null;
 };
 
 const STOCK_SELECT =
-  "quantity, branches!inner(name), products!inner(id, code, application, product_brands(name), suppliers(name))";
+  "quantity, branches!inner(name), products!inner(id, code, application, product_brands(name), suppliers(name), internal_mm, external_mm, height_mm, flange_mm, stop_mm)";
 
 export default async function PedidosPage({
   searchParams,
@@ -72,6 +77,11 @@ export default async function PedidosPage({
       application: row.products.application,
       branch: row.branches?.name ?? null,
       quantity: row.quantity,
+      internalMm: row.products.internal_mm,
+      externalMm: row.products.external_mm,
+      heightMm: row.products.height_mm,
+      flangeMm: row.products.flange_mm,
+      stopMm: row.products.stop_mm,
     });
   }
   const sinProveedor = groupsBySupplier.get("Sin proveedor");
