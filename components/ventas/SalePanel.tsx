@@ -151,15 +151,9 @@ export function SalePanel({
               <th className="px-3 py-2">Código</th>
               <th className="px-3 py-2">Marca</th>
               <th className="px-3 py-2">Stock</th>
-              <th className={`px-3 py-2 ${priceTierForSaleType(saleType) === "sf" ? "text-brand-700" : ""}`}>
-                SF
-              </th>
-              <th className={`px-3 py-2 ${priceTierForSaleType(saleType) === "cf" ? "text-brand-700" : ""}`}>
-                CF
-              </th>
-              <th className={`px-3 py-2 ${priceTierForSaleType(saleType) === "may" ? "text-brand-700" : ""}`}>
-                MAY
-              </th>
+              <th className="bg-emerald-100 px-3 py-2 text-center text-emerald-800">CF</th>
+              <th className="bg-amber-100 px-3 py-2 text-center text-amber-800">SF</th>
+              <th className="bg-rose-100 px-3 py-2 text-center text-rose-800">MAY</th>
               <th className="px-3 py-2"></th>
               <th className="px-3 py-2">MI</th>
               <th className="px-3 py-2">ME</th>
@@ -183,13 +177,19 @@ export function SalePanel({
                   </td>
                   <td className="px-3 py-2">{p.brandName}</td>
                   <td className={`px-3 py-2 ${outOfStock ? "text-red-500" : ""}`}>{p.stock}</td>
-                  <td className={`px-3 py-2 ${activeTier === "sf" ? "font-semibold text-slate-800" : "text-slate-500"}`}>
-                    {p.priceSfBs}
-                  </td>
-                  <td className={`px-3 py-2 ${activeTier === "cf" ? "font-semibold text-slate-800" : "text-slate-500"}`}>
+                  <td
+                    className={`bg-emerald-50 px-3 py-2 text-center text-emerald-900 ${activeTier === "cf" ? "font-bold ring-1 ring-inset ring-emerald-400" : ""}`}
+                  >
                     {p.priceCfBs}
                   </td>
-                  <td className={`px-3 py-2 ${activeTier === "may" ? "font-semibold text-slate-800" : "text-slate-500"}`}>
+                  <td
+                    className={`bg-amber-50 px-3 py-2 text-center text-amber-900 ${activeTier === "sf" ? "font-bold ring-1 ring-inset ring-amber-400" : ""}`}
+                  >
+                    {p.priceSfBs}
+                  </td>
+                  <td
+                    className={`bg-rose-50 px-3 py-2 text-center text-rose-900 ${activeTier === "may" ? "font-bold ring-1 ring-inset ring-rose-400" : ""}`}
+                  >
                     {p.priceMayBs}
                   </td>
                   <td className="px-3 py-2">
