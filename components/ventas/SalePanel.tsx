@@ -1,12 +1,13 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
 import { toast } from "@/lib/toast";
 import { calculateLineSubtotal, calculateSaleTotal } from "@/lib/sales";
+import { SALE_TYPES, SALE_TYPE_LABEL, priceTierForSaleType, type SaleType } from "@/lib/saleType";
 import { createSale } from "@/app/(dashboard)/ventas/actions";
 
 type ProductResult = {
@@ -25,23 +26,12 @@ type ProductResult = {
   stopMm: number | null;
 };
 
-type PriceTier = "sf" | "cf" | "may";
-
 type CartLine = {
   productId: string;
   code: string;
-  priceTier: PriceTier;
   unitPriceBs: string;
   quantity: string;
   maxStock: number;
-};
-
-const TIER_LABEL: Record<PriceTier, string> = { sf: "SF", cf: "CF", may: "MAY" };
-const PRICE_TIERS: PriceTier[] = ["sf", "cf", "may"];
-const TIER_ROW_BG: Record<PriceTier, string> = {
-  sf: "bg-white",
-  cf: "bg-slate-50",
-  may: "bg-slate-100",
 };
 
 function formatMm(value: number | null): string {
@@ -49,7 +39,8 @@ function formatMm(value: number | null): string {
   return String(Number(value.toFixed(2)));
 }
 
-function priceForTier(product: ProductResult, tier: PriceTier): number {
+function priceForSaleType(product: ProductResult, saleType: SaleType): number {
+  const tier = priceTierForSaleType(saleType);
   if (tier === "sf") return product.priceSfBs;
   if (tier === "cf") return product.priceCfBs;
   return product.priceMayBs;
@@ -62,23 +53,36 @@ export function SalePanel({
   products: ProductResult[];
   customers: { id: string; full_name: string }[];
 }) {
+  const [saleType, setSaleType] = useState<SaleType>("sin_factura");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customerId, setCustomerId] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  function addToCart(product: ProductResult, tier: PriceTier) {
+  function addToCart(product: ProductResult) {
     setCart((prev) => [
       ...prev,
       {
         productId: product.id,
         code: product.code,
-        priceTier: tier,
-        unitPriceBs: String(priceForTier(product, tier)),
+        unitPriceBs: String(priceForSaleType(product, saleType)),
         quantity: "1",
         maxStock: product.stock,
       },
     ]);
+  }
+
+  // Una venta = un solo tipo: si cambia el tipo con productos ya en el
+  // carrito, recalcula el precio de todas las líneas al nuevo tipo.
+  function changeSaleType(next: SaleType) {
+    setSaleType(next);
+    setCart((prev) =>
+      prev.map((line) => {
+        const product = products.find((p) => p.id === line.productId);
+        if (!product) return line;
+        return { ...line, unitPriceBs: String(priceForSaleType(product, next)) };
+      }),
+    );
   }
 
   function updateLine(index: number, patch: Partial<CartLine>) {
@@ -115,12 +119,12 @@ export function SalePanel({
     setLoading(true);
     const formData = new FormData();
     if (customerId) formData.set("customerId", customerId);
+    formData.set("saleType", saleType);
     formData.set(
       "items",
       JSON.stringify(
         cart.map((l) => ({
           productId: l.productId,
-          priceTier: l.priceTier,
           unitPriceBs: Number(l.unitPriceBs),
           quantity: Number(l.quantity),
         })),
@@ -147,7 +151,6 @@ export function SalePanel({
               <th className="px-3 py-2">Código</th>
               <th className="px-3 py-2">Marca</th>
               <th className="px-3 py-2">Stock</th>
-              <th className="px-3 py-2">Tipo</th>
               <th className="px-3 py-2">Precio (Bs)</th>
               <th className="px-3 py-2">MI</th>
               <th className="px-3 py-2">ME</th>
@@ -160,66 +163,32 @@ export function SalePanel({
             {products.map((p) => {
               const outOfStock = p.stock <= 0;
               return (
-                <Fragment key={p.id}>
-                  {PRICE_TIERS.map((tier, tierIndex) => (
-                    <tr
-                      key={`${p.id}-${tier}`}
-                      className={`${TIER_ROW_BG[tier]} border-b border-slate-100 ${
-                        outOfStock ? "opacity-50" : ""
-                      }`}
+                <tr
+                  key={p.id}
+                  className={`border-b border-slate-100 ${outOfStock ? "opacity-50" : ""}`}
+                >
+                  <td className="px-3 py-2">
+                    <p className="font-medium text-slate-800">{p.code}</p>
+                    <p className="text-xs text-slate-500">{p.application || "—"}</p>
+                  </td>
+                  <td className="px-3 py-2">{p.brandName}</td>
+                  <td className={`px-3 py-2 ${outOfStock ? "text-red-500" : ""}`}>{p.stock}</td>
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      disabled={outOfStock}
+                      onClick={() => addToCart(p)}
+                      className="rounded px-2 py-1 font-medium text-brand-700 hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-transparent"
                     >
-                      {tierIndex === 0 && (
-                        <td className="px-3 py-2 align-top" rowSpan={3}>
-                          <p className="font-medium text-slate-800">{p.code}</p>
-                          <p className="text-xs text-slate-500">{p.application || "—"}</p>
-                        </td>
-                      )}
-                      {tierIndex === 0 && (
-                        <td className="px-3 py-2 align-top" rowSpan={3}>
-                          {p.brandName}
-                        </td>
-                      )}
-                      {tierIndex === 0 && (
-                        <td
-                          className={`px-3 py-2 align-top ${outOfStock ? "text-red-500" : ""}`}
-                          rowSpan={3}
-                        >
-                          {p.stock}
-                        </td>
-                      )}
-                      <td className="px-3 py-2">{TIER_LABEL[tier]}</td>
-                      <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          disabled={outOfStock}
-                          onClick={() => addToCart(p, tier)}
-                          className="rounded px-2 py-1 font-medium text-brand-700 hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-transparent"
-                        >
-                          {priceForTier(p, tier)}
-                        </button>
-                      </td>
-                      {tierIndex === 0 && (
-                        <>
-                          <td className="px-3 py-2 align-top" rowSpan={3}>
-                            {formatMm(p.internalMm)}
-                          </td>
-                          <td className="px-3 py-2 align-top" rowSpan={3}>
-                            {formatMm(p.externalMm)}
-                          </td>
-                          <td className="px-3 py-2 align-top" rowSpan={3}>
-                            {formatMm(p.heightMm)}
-                          </td>
-                          <td className="px-3 py-2 align-top" rowSpan={3}>
-                            {formatMm(p.flangeMm)}
-                          </td>
-                          <td className="px-3 py-2 align-top" rowSpan={3}>
-                            {formatMm(p.stopMm)}
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  ))}
-                </Fragment>
+                      {priceForSaleType(p, saleType)}
+                    </button>
+                  </td>
+                  <td className="px-3 py-2">{formatMm(p.internalMm)}</td>
+                  <td className="px-3 py-2">{formatMm(p.externalMm)}</td>
+                  <td className="px-3 py-2">{formatMm(p.heightMm)}</td>
+                  <td className="px-3 py-2">{formatMm(p.flangeMm)}</td>
+                  <td className="px-3 py-2">{formatMm(p.stopMm)}</td>
+                </tr>
               );
             })}
           </tbody>
@@ -228,6 +197,21 @@ export function SalePanel({
 
       <Card className="h-fit space-y-4 p-4">
         <h3 className="font-semibold text-slate-800">Carrito</h3>
+
+        <label className="block text-sm">
+          <span className="mb-1 block text-slate-600">Tipo de venta</span>
+          <select
+            value={saleType}
+            onChange={(e) => changeSaleType(e.target.value as SaleType)}
+            className={fieldInputClass}
+          >
+            {SALE_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {SALE_TYPE_LABEL[t]}
+              </option>
+            ))}
+          </select>
+        </label>
 
         <label className="block text-sm">
           <span className="mb-1 block text-slate-600">Cliente (opcional)</span>
@@ -252,9 +236,7 @@ export function SalePanel({
             {cart.map((line, i) => (
               <li key={i} className="space-y-1 border-b border-slate-100 pb-2 text-sm">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-slate-700">
-                    {line.code} · {TIER_LABEL[line.priceTier]}
-                  </span>
+                  <span className="font-medium text-slate-700">{line.code}</span>
                   <button
                     type="button"
                     onClick={() => removeLine(i)}
