@@ -8,6 +8,7 @@ export type FeatureKey =
   | "proveedores"
   | "ventas"
   | "ajuste_inventario"
+  | "movimientos_producto"
   | "ajustes"
   | "auditoria";
 
@@ -30,6 +31,7 @@ export const FEATURES: FeatureMeta[] = [
   { key: "proveedores", label: "Proveedores", href: "/proveedores", optIn: true },
   { key: "ventas", label: "Ventas", href: "/ventas", optIn: true },
   { key: "ajuste_inventario", label: "Ajuste de Inventario", href: "/ajuste-inventario", optIn: true },
+  { key: "movimientos_producto", label: "Movimientos de Producto", href: "/movimientos-producto", optIn: true },
   { key: "ajustes", label: "Ajustes", href: "/ajustes", core: true },
   { key: "auditoria", label: "Auditoría", href: "/auditoria", optIn: true },
 ];
