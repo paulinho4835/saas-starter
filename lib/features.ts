@@ -12,6 +12,7 @@ export type FeatureKey =
   | "reporte_ventas"
   | "almacen"
   | "pedidos"
+  | "usuarios"
   | "ajustes"
   | "auditoria";
 
@@ -38,6 +39,7 @@ export const FEATURES: FeatureMeta[] = [
   { key: "reporte_ventas", label: "Reporte de Ventas", href: "/reporte-ventas", optIn: true },
   { key: "almacen", label: "Almacén", href: "/almacen", optIn: true },
   { key: "pedidos", label: "Pedidos", href: "/pedidos", optIn: true },
+  { key: "usuarios", label: "Usuarios", href: "/usuarios", core: true },
   { key: "ajustes", label: "Ajustes", href: "/ajustes", core: true },
   { key: "auditoria", label: "Auditoría", href: "/auditoria", optIn: true },
 ];
@@ -62,3 +64,37 @@ export function normalizeFeatures(raw: unknown): Features {
 export function isEnabled(features: Features, key: FeatureKey): boolean {
   return features[key];
 }
+
+// -- Módulos "reservados": existían en el sistema legado de referencia pero
+// todavía no tienen página construida en este proyecto. No entran en FEATURES
+// (no tienen href / entrada de menú); solo existen para que el admin pueda
+// dejarlos pre-marcados o desmarcados por usuario desde /usuarios, listos
+// para cuando se construyan.
+export type ReservedFeatureKey =
+  | "traspasos"
+  | "devoluciones"
+  | "reporte_productos"
+  | "tasa_cambio";
+
+export interface ReservedFeatureMeta {
+  key: ReservedFeatureKey;
+  label: string;
+}
+
+export const RESERVED_FEATURES: ReservedFeatureMeta[] = [
+  { key: "traspasos", label: "Traspasos" },
+  { key: "devoluciones", label: "Devoluciones" },
+  { key: "reporte_productos", label: "Reporte Producto" },
+  { key: "tasa_cambio", label: "Tasa Cambio" },
+];
+
+// Todo lo que puede guardarse en profiles.allowed_modules.
+export type AssignableModuleKey = FeatureKey | ReservedFeatureKey;
+
+// Módulos que aparecen como checkbox en el modal de permisos de /usuarios:
+// los módulos no-core (los core siempre están disponibles para el rol que
+// los ve) + los reservados del sistema legado.
+export const ASSIGNABLE_MODULES: { key: AssignableModuleKey; label: string }[] = [
+  ...FEATURES.filter((f) => !f.core).map((f) => ({ key: f.key as AssignableModuleKey, label: f.label })),
+  ...RESERVED_FEATURES,
+];

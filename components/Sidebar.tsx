@@ -12,6 +12,7 @@ import {
   Wrench,
   Truck,
   History,
+  UserCog,
   Menu,
   X,
   type LucideIcon,
@@ -30,6 +31,7 @@ const ICONS: Record<string, LucideIcon> = {
   "/productos": Wrench,
   "/proveedores": Truck,
   "/ajuste-inventario": History,
+  "/usuarios": UserCog,
   "/ajustes": Settings,
   "/auditoria": ShieldCheck,
 };

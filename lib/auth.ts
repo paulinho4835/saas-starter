@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { Role } from "@/lib/rbac";
+import type { AssignableModuleKey } from "@/lib/features";
 
 export interface CurrentProfile {
   userId: string;
@@ -8,6 +9,7 @@ export interface CurrentProfile {
   role: Role;
   fullName: string;
   branchId: string | null;
+  allowedModules: AssignableModuleKey[] | null;
 }
 
 // Perfil del usuario autenticado (org_id + rol + sucursal). Cacheado por request.
@@ -22,7 +24,7 @@ export const getProfile = cache(async (): Promise<CurrentProfile | null> => {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id, role, full_name, branch_id")
+    .select("org_id, role, full_name, branch_id, allowed_modules")
     .eq("id", user.id)
     .single();
   if (!profile) return null;
@@ -33,5 +35,6 @@ export const getProfile = cache(async (): Promise<CurrentProfile | null> => {
     role: profile.role as Role,
     fullName: profile.full_name,
     branchId: profile.branch_id,
+    allowedModules: (profile.allowed_modules as AssignableModuleKey[] | null) ?? null,
   };
 });
