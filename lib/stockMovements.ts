@@ -9,7 +9,8 @@ export type MovementType =
   | "importacion"
   | "ajuste_manual"
   | "venta"
-  | "transferencia";
+  | "transferencia"
+  | "devolucion";
 
 export const MOVEMENT_TYPES: MovementType[] = [
   "alta_inicial",
@@ -17,6 +18,7 @@ export const MOVEMENT_TYPES: MovementType[] = [
   "ajuste_manual",
   "venta",
   "transferencia",
+  "devolucion",
 ];
 
 const MOVEMENT_TYPE_LABEL: Record<MovementType, string> = {
@@ -25,6 +27,7 @@ const MOVEMENT_TYPE_LABEL: Record<MovementType, string> = {
   ajuste_manual: "Ajuste manual",
   venta: "Venta",
   transferencia: "Transferencia",
+  devolucion: "Devolución",
 };
 
 export function movementTypeLabel(type: MovementType): string {

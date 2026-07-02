@@ -10,6 +10,7 @@ export type FeatureKey =
   | "ajuste_inventario"
   | "movimientos_producto"
   | "reporte_ventas"
+  | "devoluciones"
   | "almacen"
   | "pedidos"
   | "usuarios"
@@ -37,6 +38,7 @@ export const FEATURES: FeatureMeta[] = [
   { key: "ajuste_inventario", label: "Ajuste de Inventario", href: "/ajuste-inventario", optIn: true },
   { key: "movimientos_producto", label: "Movimientos de Producto", href: "/movimientos-producto", optIn: true },
   { key: "reporte_ventas", label: "Reporte de Ventas", href: "/reporte-ventas", optIn: true },
+  { key: "devoluciones", label: "Devoluciones", href: "/devoluciones", optIn: true },
   { key: "almacen", label: "Almacén", href: "/almacen", optIn: true },
   { key: "pedidos", label: "Pedidos", href: "/pedidos", optIn: true },
   { key: "usuarios", label: "Usuarios", href: "/usuarios", core: true },
@@ -70,11 +72,7 @@ export function isEnabled(features: Features, key: FeatureKey): boolean {
 // (no tienen href / entrada de menú); solo existen para que el admin pueda
 // dejarlos pre-marcados o desmarcados por usuario desde /usuarios, listos
 // para cuando se construyan.
-export type ReservedFeatureKey =
-  | "traspasos"
-  | "devoluciones"
-  | "reporte_productos"
-  | "tasa_cambio";
+export type ReservedFeatureKey = "traspasos" | "reporte_productos" | "tasa_cambio";
 
 export interface ReservedFeatureMeta {
   key: ReservedFeatureKey;
@@ -83,7 +81,6 @@ export interface ReservedFeatureMeta {
 
 export const RESERVED_FEATURES: ReservedFeatureMeta[] = [
   { key: "traspasos", label: "Traspasos" },
-  { key: "devoluciones", label: "Devoluciones" },
   { key: "reporte_productos", label: "Reporte Producto" },
   { key: "tasa_cambio", label: "Tasa Cambio" },
 ];

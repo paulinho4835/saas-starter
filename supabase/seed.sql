@@ -31,6 +31,7 @@ begin
       "ajuste_inventario": true,
       "movimientos_producto": true,
       "reporte_ventas": true,
+      "devoluciones": true,
       "almacen": true,
       "auditoria": true
     }'::jsonb,
