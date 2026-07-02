@@ -8,7 +8,9 @@ import { Field, FieldLabel, fieldInputClass } from "@/components/ui/Field";
 import { Badge } from "@/components/ui/Badge";
 import { toast } from "@/lib/toast";
 import { confirm } from "@/lib/confirm";
-import { inviteTeamUser, setUserActive, setUserBranch } from "@/app/(dashboard)/ajustes/actions";
+import type { AssignableModuleKey } from "@/lib/features";
+import { inviteTeamUser, setUserActive, setUserBranch } from "@/app/(dashboard)/usuarios/actions";
+import { PermissionsModal } from "@/components/usuarios/PermissionsModal";
 
 export type TeamMember = {
   id: string;
@@ -16,6 +18,7 @@ export type TeamMember = {
   role: string;
   active: boolean;
   branch_id: string | null;
+  allowed_modules: AssignableModuleKey[] | null;
 };
 
 type BranchOption = { id: string; name: string };
@@ -37,6 +40,7 @@ export function TeamPanel({
   branches: BranchOption[];
 }) {
   const [loading, setLoading] = useState(false);
+  const [permissionsFor, setPermissionsFor] = useState<TeamMember | null>(null);
   const router = useRouter();
 
   async function onInvite(e: React.FormEvent<HTMLFormElement>) {
@@ -132,19 +136,33 @@ export function TeamPanel({
                 <MemberBranchEditor member={m} branches={branches} />
                 {!m.active && <Badge tone="danger">Inactivo</Badge>}
                 {m.id !== currentUserId && (
-                  <Button
-                    size="sm"
-                    variant={m.active ? "danger" : "secondary"}
-                    onClick={() => onToggle(m)}
-                  >
-                    {m.active ? "Desactivar" : "Reactivar"}
-                  </Button>
+                  <>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setPermissionsFor(m)}
+                    >
+                      Permisos
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={m.active ? "danger" : "secondary"}
+                      onClick={() => onToggle(m)}
+                    >
+                      {m.active ? "Desactivar" : "Reactivar"}
+                    </Button>
+                  </>
                 )}
               </div>
             </li>
           ))}
         </ul>
       </Card>
+
+      <PermissionsModal
+        member={permissionsFor}
+        onClose={() => setPermissionsFor(null)}
+      />
     </div>
   );
 }
