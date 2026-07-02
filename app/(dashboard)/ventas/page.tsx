@@ -3,13 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { requireNavAccess } from "@/lib/guard";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Button } from "@/components/ui/Button";
-import { fieldInputClass } from "@/components/ui/Field";
 import { escapePostgrestFilterValue } from "@/lib/postgrest";
 import { toleranceRange } from "@/lib/measurementSearch";
 import { SalePanel } from "@/components/ventas/SalePanel";
+import { VentasFilters } from "./VentasFilters";
 
 type SearchParams = {
   code?: string;
@@ -77,6 +75,10 @@ export default async function VentasPage({
     .from("products")
     .select(RESULT_SELECT)
     .eq("product_stock.branch_id", branchId)
+    .order("internal_mm", { nullsFirst: false })
+    .order("external_mm", { nullsFirst: false })
+    .order("height_mm", { nullsFirst: false })
+    .order("flange_mm", { nullsFirst: false })
     .order("code")
     .limit(50);
 
@@ -127,90 +129,19 @@ export default async function VentasPage({
     <div className="space-y-6">
       <PageHeader title="Ventas" subtitle={`${products.length} resultado(s)`} />
 
-      <Card className="p-4">
-        <form className="flex flex-wrap items-end gap-3" method="get">
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-600">Código</span>
-            <input
-              type="text"
-              name="code"
-              defaultValue={sp.code ?? ""}
-              className={fieldInputClass}
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-600">Aplicación</span>
-            <input
-              type="text"
-              name="application"
-              defaultValue={sp.application ?? ""}
-              className={fieldInputClass}
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-600">Marca</span>
-            <select name="brandId" defaultValue={sp.brandId ?? ""} className={fieldInputClass}>
-              <option value="">Todas</option>
-              {brands.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-600">MI</span>
-            <input
-              type="number"
-              step="0.01"
-              name="mi"
-              defaultValue={sp.mi ?? ""}
-              className={`${fieldInputClass} w-24`}
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-600">ME</span>
-            <input
-              type="number"
-              step="0.01"
-              name="me"
-              defaultValue={sp.me ?? ""}
-              className={`${fieldInputClass} w-24`}
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-600">Altura</span>
-            <input
-              type="number"
-              step="0.01"
-              name="alt"
-              defaultValue={sp.alt ?? ""}
-              className={`${fieldInputClass} w-24`}
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-600">Pestaña</span>
-            <input
-              type="number"
-              step="0.01"
-              name="pest"
-              defaultValue={sp.pest ?? ""}
-              className={`${fieldInputClass} w-24`}
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-600">Tope</span>
-            <input
-              type="number"
-              step="0.01"
-              name="tope"
-              defaultValue={sp.tope ?? ""}
-              className={`${fieldInputClass} w-24`}
-            />
-          </label>
-          <Button type="submit">Buscar</Button>
-        </form>
-      </Card>
+      <VentasFilters
+        brands={brands}
+        initial={{
+          code: sp.code ?? "",
+          application: sp.application ?? "",
+          brandId: sp.brandId ?? "",
+          mi: sp.mi ?? "",
+          me: sp.me ?? "",
+          alt: sp.alt ?? "",
+          pest: sp.pest ?? "",
+          tope: sp.tope ?? "",
+        }}
+      />
 
       {products.length === 0 ? (
         <EmptyState
