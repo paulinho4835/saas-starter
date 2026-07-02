@@ -144,9 +144,9 @@ export function SalePanel({
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
-      <Card className="overflow-x-auto lg:col-span-2">
+      <Card className="max-h-[75vh] overflow-auto lg:col-span-2">
         <table className="w-full min-w-[720px] text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10 bg-white">
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-3 py-2">Código</th>
               <th className="px-3 py-2">Marca</th>
