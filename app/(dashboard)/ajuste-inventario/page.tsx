@@ -38,7 +38,11 @@ export default async function AjusteInventarioPage({
   const supabase = await createClient();
   const canAdjust = can(profile?.role, "productos:write");
 
-  const { data: branchesData } = await supabase.from("branches").select("id, name").order("name");
+  const { data: branchesData } = await supabase
+    .from("branches")
+    .select("id, name")
+    .eq("is_warehouse", false)
+    .order("name");
   const branches = branchesData ?? [];
 
   let stockQuery = supabase.from("product_stock").select(STOCK_SELECT).order("branch_id").limit(100);

@@ -83,7 +83,7 @@ export default async function ProductosPage({
       supabase.from("product_brands").select("id, name").order("name"),
       supabase.from("product_families").select("id, name").order("name"),
       supabase.from("product_origins").select("id, name").order("name"),
-      supabase.from("branches").select("id, name").order("name"),
+      supabase.from("branches").select("id, name").eq("is_warehouse", false).order("name"),
       supabase.from("suppliers").select("id, name").order("name"),
     ]);
   const brands = brandsData ?? [];

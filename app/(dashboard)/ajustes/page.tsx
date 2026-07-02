@@ -20,15 +20,17 @@ export default async function AjustesPage() {
       .select("id, full_name, role, active, branch_id")
       .eq("org_id", profile.orgId)
       .order("full_name"),
-    supabase.from("branches").select("id, name").order("name"),
+    supabase.from("branches").select("id, name, is_warehouse").order("name"),
   ]);
   const members = (membersData ?? []) as TeamMember[];
-  const branches = (branchesData ?? []) as { id: string; name: string }[];
+  const branches = (branchesData ?? []) as { id: string; name: string; is_warehouse: boolean }[];
+  // El almacén no es una sucursal de trabajo: no debe poder asignarse a un usuario.
+  const teamBranches = branches.filter((b) => !b.is_warehouse);
 
   return (
     <div className="space-y-6">
       <PageHeader title="Ajustes" subtitle="Equipo de la organización" />
-      <TeamPanel members={members} currentUserId={profile.userId} branches={branches} />
+      <TeamPanel members={members} currentUserId={profile.userId} branches={teamBranches} />
 
       <div>
         <h2 className="mb-3 font-semibold text-slate-800">Sucursales</h2>
