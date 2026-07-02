@@ -7,6 +7,7 @@ describe("movementTypeLabel", () => {
     expect(movementTypeLabel("importacion")).toBe("Importación");
     expect(movementTypeLabel("ajuste_manual")).toBe("Ajuste manual");
     expect(movementTypeLabel("venta")).toBe("Venta");
+    expect(movementTypeLabel("transferencia")).toBe("Transferencia");
   });
 
   it("has one label for every declared movement type", () => {
