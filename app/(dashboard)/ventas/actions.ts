@@ -6,16 +6,17 @@ import { getProfile } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
 import { calculateLineSubtotal, calculateSaleTotal } from "@/lib/sales";
+import { SALE_TYPES, priceTierForSaleType, type SaleType } from "@/lib/saleType";
 
 const saleItemSchema = z.object({
   productId: z.string().uuid(),
-  priceTier: z.enum(["sf", "cf", "may"]),
   unitPriceBs: z.number().nonnegative(),
   quantity: z.number().int().positive(),
 });
 
 const createSaleSchema = z.object({
   customerId: z.string().uuid().nullable(),
+  saleType: z.enum(SALE_TYPES as [SaleType, ...SaleType[]]),
   items: z.array(saleItemSchema).min(1, "Agrega al menos un producto."),
 });
 
@@ -53,6 +54,7 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
 
   const parsed = createSaleSchema.safeParse({
     customerId: customerIdRaw ? String(customerIdRaw) : null,
+    saleType: formData.get("saleType"),
     items: itemsRaw,
   });
   if (!parsed.success) {
@@ -143,6 +145,7 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
       branch_id: branchId,
       seller_id: profile.userId,
       customer_id: parsed.data.customerId,
+      sale_type: parsed.data.saleType,
       total_bs: total,
     })
     .select("id")
@@ -156,7 +159,7 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
   const itemsPayload = parsed.data.items.map((item) => ({
     sale_id: sale.id,
     product_id: item.productId,
-    price_tier: item.priceTier,
+    price_tier: priceTierForSaleType(parsed.data.saleType),
     unit_price_bs: item.unitPriceBs,
     quantity: item.quantity,
     subtotal_bs: calculateLineSubtotal(item),
