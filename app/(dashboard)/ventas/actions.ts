@@ -15,7 +15,8 @@ const saleItemSchema = z.object({
 });
 
 const createSaleSchema = z.object({
-  customerId: z.string().uuid().nullable(),
+  customerName: z.string().trim().max(120).optional(),
+  customerNit: z.string().trim().max(30).optional(),
   saleType: z.enum(SALE_TYPES as [SaleType, ...SaleType[]]),
   items: z.array(saleItemSchema).min(1, "Agrega al menos un producto."),
 });
@@ -50,10 +51,12 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
   } catch {
     return { ok: false, error: "Carrito inválido." };
   }
-  const customerIdRaw = formData.get("customerId");
+  const customerNameRaw = formData.get("customerName");
+  const customerNitRaw = formData.get("customerNit");
 
   const parsed = createSaleSchema.safeParse({
-    customerId: customerIdRaw ? String(customerIdRaw) : null,
+    customerName: customerNameRaw ? String(customerNameRaw) : undefined,
+    customerNit: customerNitRaw ? String(customerNitRaw) : undefined,
     saleType: formData.get("saleType"),
     items: itemsRaw,
   });
@@ -64,18 +67,6 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
   const supabase = await createClient();
   const orgId = profile.orgId;
   const branchId = profile.branchId;
-
-  if (parsed.data.customerId) {
-    const { data: customerRow } = await supabase
-      .from("customers")
-      .select("id")
-      .eq("id", parsed.data.customerId)
-      .eq("org_id", orgId)
-      .maybeSingle();
-    if (!customerRow) {
-      return { ok: false, error: "El cliente seleccionado no es válido." };
-    }
-  }
 
   // 1) Verificación previa de stock (lectura en batch de todas las líneas).
   const productIds = [...new Set(parsed.data.items.map((i) => i.productId))];
@@ -136,7 +127,53 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
     decremented.push({ productId: item.productId, quantity: item.quantity });
   }
 
-  // 3) Crear la venta y sus líneas.
+  // 3) Resuelve el cliente por NIT (dedup) o crea uno nuevo según lo que haya
+  // escrito el vendedor en el mostrador, recién ahora que el stock ya está
+  // validado y descontado (evita crear un cliente huérfano si la venta
+  // termina fallando por falta de stock). Ver
+  // docs/superpowers/specs/2026-07-02-cliente-en-venta-design.md.
+  let resolvedCustomerId: string | null = null;
+  const { customerName, customerNit } = parsed.data;
+  if (customerNit) {
+    const { data: existing } = await supabase
+      .from("customers")
+      .select("id, full_name")
+      .eq("org_id", orgId)
+      .ilike("nit", customerNit)
+      .maybeSingle();
+    if (existing) {
+      resolvedCustomerId = existing.id;
+      if (customerName && customerName !== existing.full_name) {
+        await supabase.from("customers").update({ full_name: customerName }).eq("id", existing.id);
+      }
+    } else {
+      const { data: created, error: createError } = await supabase
+        .from("customers")
+        .insert({ org_id: orgId, full_name: customerName || "Cliente sin nombre", nit: customerNit })
+        .select("id")
+        .single();
+      if (createError || !created) {
+        await revertDecrements();
+        console.error("createSale customer (nit):", createError?.message);
+        return { ok: false, error: "No se pudo registrar el cliente. Tu stock no fue afectado." };
+      }
+      resolvedCustomerId = created.id;
+    }
+  } else if (customerName) {
+    const { data: created, error: createError } = await supabase
+      .from("customers")
+      .insert({ org_id: orgId, full_name: customerName })
+      .select("id")
+      .single();
+    if (createError || !created) {
+      await revertDecrements();
+      console.error("createSale customer (name):", createError?.message);
+      return { ok: false, error: "No se pudo registrar el cliente. Tu stock no fue afectado." };
+    }
+    resolvedCustomerId = created.id;
+  }
+
+  // 4) Crear la venta y sus líneas.
   const total = calculateSaleTotal(parsed.data.items);
   const { data: sale, error: saleError } = await supabase
     .from("sales")
@@ -144,7 +181,7 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
       org_id: orgId,
       branch_id: branchId,
       seller_id: profile.userId,
-      customer_id: parsed.data.customerId,
+      customer_id: resolvedCustomerId,
       sale_type: parsed.data.saleType,
       total_bs: total,
     })
@@ -172,7 +209,7 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
     return { ok: false, error: "No se pudo registrar la venta. Tu stock no fue afectado." };
   }
 
-  // 4) Historial de movimientos: una fila por línea vendida, ligada a la venta.
+  // 5) Historial de movimientos: una fila por línea vendida, ligada a la venta.
   const movementsPayload = parsed.data.items.map((item) => {
     const original = stockByProduct.get(item.productId)!;
     return {
