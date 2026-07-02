@@ -34,6 +34,7 @@ begin
       "devoluciones": true,
       "pedidos": true,
       "almacen": true,
+      "traspasos": true,
       "auditoria": true
     }'::jsonb,
     true

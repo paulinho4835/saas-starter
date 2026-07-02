@@ -17,6 +17,7 @@ const NAV_WHITELIST: Record<Role, FeatureKey[]> = {
     "reporte_ventas",
     "devoluciones",
     "almacen",
+    "traspasos",
     "pedidos",
     "usuarios",
     "ajustes",
@@ -33,6 +34,7 @@ const NAV_WHITELIST: Record<Role, FeatureKey[]> = {
     "movimientos_producto",
     "reporte_ventas",
     "devoluciones",
+    "traspasos",
     "pedidos",
   ],
   member: ["dashboard", "clientes", "productos", "proveedores", "ventas"],
@@ -66,7 +68,8 @@ type Permission =
   | "proveedores:write"
   | "ventas:create"
   | "devoluciones:create"
-  | "almacen:transfer";
+  | "almacen:transfer"
+  | "traspasos:create";
 
 const MATRIX: Record<Role, Permission[]> = {
   admin: [
@@ -86,6 +89,7 @@ const MATRIX: Record<Role, Permission[]> = {
     "ventas:create",
     "devoluciones:create",
     "almacen:transfer",
+    "traspasos:create",
   ],
   manager: [
     "clientes:read",
@@ -99,6 +103,7 @@ const MATRIX: Record<Role, Permission[]> = {
     "proveedores:write",
     "ventas:create",
     "devoluciones:create",
+    "traspasos:create",
   ],
   member: [
     "clientes:read",
