@@ -1,4 +1,4 @@
-import type { FeatureKey } from "@/lib/features";
+import type { AssignableModuleKey, FeatureKey } from "@/lib/features";
 
 // Permisos por rol (espejo de las políticas RLS — la DB es la fuente de verdad).
 export type Role = "admin" | "manager" | "member" | "viewer";
@@ -14,6 +14,7 @@ const NAV_WHITELIST: Record<Role, FeatureKey[]> = {
     "ventas",
     "ajuste_inventario",
     "movimientos_producto",
+    "usuarios",
     "ajustes",
     "auditoria",
   ],
@@ -31,9 +32,15 @@ const NAV_WHITELIST: Record<Role, FeatureKey[]> = {
   viewer: ["dashboard", "clientes", "productos", "proveedores"],
 };
 
-export function canSeeNav(role: Role | undefined, key: FeatureKey): boolean {
+export function canSeeNav(
+  role: Role | undefined,
+  key: FeatureKey,
+  allowedModules?: AssignableModuleKey[] | null,
+): boolean {
   if (!role) return false;
-  return NAV_WHITELIST[role]?.includes(key) ?? false;
+  if (!NAV_WHITELIST[role]?.includes(key)) return false;
+  if (allowedModules == null) return true;
+  return allowedModules.includes(key);
 }
 
 type Permission =
