@@ -73,10 +73,11 @@ export default async function VentasPage({
 
   // Si hay algún filtro de medida activo, se prioriza la cercanía al valor
   // buscado (no un orden ascendente crudo, que entierra la coincidencia
-  // exacta detrás de valores menores dentro del rango de tolerancia) — para
-  // eso se trae un lote más grande y se reordena en JS antes de recortar a
-  // RESULT_LIMIT. Sin filtro de medida, se mantiene el orden correlativo
-  // ascendente de siempre (navegación general del catálogo).
+  // exacta detrás de valores menores dentro del rango de tolerancia) y se
+  // muestran TODOS los resultados dentro del rango de tolerancia, sin recorte
+  // — el rango ya acota el universo a productos con esa medida, no hace falta
+  // limitar más. Sin filtro de medida, se mantiene el límite normal de
+  // navegación general del catálogo.
   const RESULT_LIMIT = 50;
   const hasMeasurementFilter = Boolean(sp.mi || sp.me || sp.alt || sp.pest || sp.tope);
 
@@ -89,7 +90,7 @@ export default async function VentasPage({
     .order("height_mm", { nullsFirst: false })
     .order("flange_mm", { nullsFirst: false })
     .order("code")
-    .limit(hasMeasurementFilter ? RESULT_LIMIT * 4 : RESULT_LIMIT);
+    .limit(hasMeasurementFilter ? 1000 : RESULT_LIMIT);
 
   if (sp.code) query = query.ilike("code", `%${escapePostgrestFilterValue(sp.code)}%`);
   if (sp.application)
@@ -136,7 +137,7 @@ export default async function VentasPage({
       return total;
     }
 
-    rows = [...rows].sort((a, b) => distance(a) - distance(b)).slice(0, RESULT_LIMIT);
+    rows = [...rows].sort((a, b) => distance(a) - distance(b));
   }
 
   const products = rows.map((r) => ({
