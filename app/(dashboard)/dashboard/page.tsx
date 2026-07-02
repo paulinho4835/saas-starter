@@ -5,16 +5,23 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Stat } from "@/components/ui/Stat";
 import { PeriodSelect, PERIOD_LABEL, type Period } from "./PeriodSelect";
+import { PaymentFilter, PAYMENT_FILTER_LABEL, type PaymentFilterValue } from "./PaymentFilter";
 import { periodSince } from "@/lib/dashboardPeriod";
 
-type SearchParams = { period?: string };
+type SearchParams = { period?: string; payment?: string };
 
 const LOW_STOCK_THRESHOLD = 5;
 const TOP_PRODUCTS_LIMIT = 10;
 const LOW_STOCK_LIMIT = 10;
+const EFECTIVO_TYPES = ["sin_factura", "con_factura", "mayorista"];
+const QR_TYPES = ["sin_factura_qr", "con_factura_qr"];
 
 function isPeriod(value: string | undefined): value is Period {
   return value === "7d" || value === "30d" || value === "month" || value === "all";
+}
+
+function isPaymentFilter(value: string | undefined): value is PaymentFilterValue {
+  return value === "total" || value === "efectivo" || value === "qr";
 }
 
 function formatBs(value: number): string {
@@ -28,6 +35,7 @@ export default async function DashboardHome({
 }) {
   const sp = await searchParams;
   const period: Period = isPeriod(sp.period) ? sp.period : "30d";
+  const payment: PaymentFilterValue = isPaymentFilter(sp.payment) ? sp.payment : "total";
   const since = periodSince(period);
 
   const profile = await getProfile();
@@ -45,6 +53,8 @@ export default async function DashboardHome({
       (async () => {
         let query = supabase.from("sales").select("total_bs");
         if (since) query = query.gte("created_at", since.toISOString());
+        if (payment === "efectivo") query = query.in("sale_type", EFECTIVO_TYPES);
+        if (payment === "qr") query = query.in("sale_type", QR_TYPES);
         return query;
       })(),
       isAdmin
@@ -83,18 +93,23 @@ export default async function DashboardHome({
       <PageHeader
         title={`Hola, ${profile?.fullName ?? ""}`}
         subtitle="Resumen de tu organización"
-        action={<PeriodSelect value={period} />}
+        action={
+          <div className="flex gap-2">
+            <PeriodSelect value={period} />
+            <PaymentFilter value={payment} period={period} />
+          </div>
+        }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Clientes" value={clientes ?? 0} icon={<Users className="h-5 w-5" />} />
         <Stat
-          label={`Ventas · ${PERIOD_LABEL[period]}`}
+          label={`Ventas · ${PERIOD_LABEL[period]} · ${PAYMENT_FILTER_LABEL[payment]}`}
           value={formatBs(salesTotal)}
           icon={<Receipt className="h-5 w-5" />}
         />
         <Stat
-          label={`Cantidad de ventas · ${PERIOD_LABEL[period]}`}
+          label={`Cantidad · ${PERIOD_LABEL[period]} · ${PAYMENT_FILTER_LABEL[payment]}`}
           value={sales.length}
           icon={<ShoppingCart className="h-5 w-5" />}
         />
