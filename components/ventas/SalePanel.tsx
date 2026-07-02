@@ -186,16 +186,24 @@ export function SalePanel({
               {pinned.map((p) => (
                 <div
                   key={p.id}
-                  className="flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 py-1 pl-3 pr-1 text-xs"
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-2xl border border-brand-200 bg-brand-50 py-1.5 pl-3 pr-1 text-xs"
                 >
                   <span className="font-medium text-slate-800">{p.code}</span>
-                  <span className="text-slate-500">{priceForSaleType(p, saleType)} Bs</span>
+                  <span className="flex items-center gap-1 text-slate-500">
+                    <span className="rounded bg-emerald-100 px-1 text-emerald-800">CF {p.priceCfBs}</span>
+                    <span className="rounded bg-amber-100 px-1 text-amber-800">SF {p.priceSfBs}</span>
+                    <span className="rounded bg-rose-100 px-1 text-rose-800">MAY {p.priceMayBs}</span>
+                  </span>
+                  <span className="text-slate-500">
+                    MI {formatMm(p.internalMm)} · ME {formatMm(p.externalMm)} · ALT {formatMm(p.heightMm)} · PEST{" "}
+                    {formatMm(p.flangeMm)} · TOPE {formatMm(p.stopMm)}
+                  </span>
                   <button
                     type="button"
                     onClick={() => addToCart(p)}
                     className="rounded-full bg-brand-600 px-2 py-0.5 font-medium text-white hover:bg-brand-700"
                   >
-                    Agregar
+                    Agregar {priceForSaleType(p, saleType)} Bs
                   </button>
                   <button
                     type="button"
