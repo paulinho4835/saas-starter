@@ -64,12 +64,8 @@ export default async function VentasPage({
 
   const branchId = profile.branchId;
 
-  const [{ data: brandsData }, { data: customersData }] = await Promise.all([
-    supabase.from("product_brands").select("id, name").order("name"),
-    supabase.from("customers").select("id, full_name").order("full_name"),
-  ]);
+  const { data: brandsData } = await supabase.from("product_brands").select("id, name").order("name");
   const brands = brandsData ?? [];
-  const customers = customersData ?? [];
 
   // Si hay algún filtro de medida activo, se prioriza la cercanía al valor
   // buscado (no un orden ascendente crudo, que entierra la coincidencia
@@ -181,7 +177,7 @@ export default async function VentasPage({
           description="Ajusta los filtros de búsqueda."
         />
       ) : (
-        <SalePanel products={products} customers={customers} />
+        <SalePanel products={products} />
       )}
     </div>
   );
