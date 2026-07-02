@@ -30,6 +30,7 @@ begin
       "ventas": true,
       "ajuste_inventario": true,
       "movimientos_producto": true,
+      "reporte_ventas": true,
       "almacen": true,
       "auditoria": true
     }'::jsonb,
