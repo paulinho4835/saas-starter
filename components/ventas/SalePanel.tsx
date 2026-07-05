@@ -73,9 +73,9 @@ const TIER_PRICE: Record<PriceTier, keyof ProductResult> = {
   may: "priceMayBs",
 };
 const TIER_ROW_CLASS: Record<PriceTier, string> = {
-  cf: "bg-emerald-200",
-  sf: "bg-amber-100",
-  may: "bg-rose-200",
+  cf: "bg-emerald-100",
+  sf: "bg-yellow-100",
+  may: "bg-rose-100",
 };
 
 export function SalePanel({
