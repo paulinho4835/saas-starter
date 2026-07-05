@@ -6,7 +6,7 @@ import { escapePostgrestFilterValue } from "@/lib/postgrest";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
 import { AdjustStockButton } from "@/components/ajuste-inventario/AdjustStockButton";
 
@@ -73,32 +73,48 @@ export default async function AjusteInventarioPage({
             </select>
           </label>
           <Button type="submit">Buscar</Button>
+          <ButtonLink variant="secondary" href="/ajuste-inventario">
+            Limpiar
+          </ButtonLink>
         </form>
       </Card>
 
-      <Card>
+      <Card className="overflow-auto">
         {stockRows.length === 0 ? (
           <EmptyState title="Sin resultados" description="Ajusta los filtros de búsqueda." />
         ) : (
-          <ul className="divide-y divide-slate-200">
-            {stockRows.map((row) => (
-              <li key={row.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="truncate font-medium text-slate-800">
-                    {row.products?.code ?? "—"}{" "}
-                    <span className="font-normal text-slate-400">· {row.branches?.name ?? "—"}</span>
-                  </p>
-                  <p className="text-xs text-slate-400">Stock: {row.quantity}</p>
-                </div>
-                {canAdjust && (
-                  <div className="flex shrink-0 gap-2">
-                    <AdjustStockButton productId={row.product_id} branchId={row.branch_id} direction="add" />
-                    <AdjustStockButton productId={row.product_id} branchId={row.branch_id} direction="reduce" />
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
+          <table className="w-full min-w-[720px] text-sm">
+            <thead className="border-b border-slate-200 text-left text-xs uppercase text-slate-400">
+              <tr>
+                <th className="px-4 py-2">ID producto</th>
+                <th className="px-4 py-2">Código producto</th>
+                <th className="px-4 py-2">Sucursal</th>
+                <th className="px-4 py-2">Stock</th>
+                <th className="px-4 py-2"></th>
+                <th className="px-4 py-2"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {stockRows.map((row) => (
+                <tr key={row.id}>
+                  <td className="px-4 py-2 text-slate-500">{row.product_id.slice(0, 8)}</td>
+                  <td className="px-4 py-2 font-medium text-slate-800">{row.products?.code ?? "—"}</td>
+                  <td className="px-4 py-2 text-slate-500">{row.branches?.name ?? "—"}</td>
+                  <td className="px-4 py-2 font-semibold text-slate-800">{row.quantity}</td>
+                  <td className="px-4 py-2">
+                    {canAdjust && (
+                      <AdjustStockButton productId={row.product_id} branchId={row.branch_id} direction="add" />
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    {canAdjust && (
+                      <AdjustStockButton productId={row.product_id} branchId={row.branch_id} direction="reduce" />
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </Card>
     </div>
