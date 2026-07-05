@@ -33,6 +33,7 @@ begin
       "reporte_ventas": true,
       "devoluciones": true,
       "pedidos": true,
+      "reporte_productos": true,
       "almacen": true,
       "traspasos": true,
       "auditoria": true

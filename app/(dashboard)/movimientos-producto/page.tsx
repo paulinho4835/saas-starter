@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
-import { ExportMovimientosButton } from "@/components/movimientosProducto/ExportMovimientosButton";
+import { ExportExcelButton } from "@/components/ui/ExportExcelButton";
 
 const PAGE_SIZE = 25;
 
@@ -270,7 +270,9 @@ export default async function MovimientosProductoPage({
       )}
 
       {rows.length > 0 && (
-        <ExportMovimientosButton
+        <ExportExcelButton
+          filenamePrefix="movimientos-producto"
+          sheetName="Movimientos"
           rows={rows.map((r) => ({
             "Tipo movimiento": r.tipoMovimiento,
             Fecha: r.fecha,
