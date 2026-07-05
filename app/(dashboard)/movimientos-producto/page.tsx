@@ -2,19 +2,19 @@ import { History } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireNavAccess } from "@/lib/guard";
 import { escapePostgrestFilterValue } from "@/lib/postgrest";
-import { movementTypeLabel, MOVEMENT_TYPES, type MovementType } from "@/lib/stockMovements";
+import { movementTypeLabel, type MovementType } from "@/lib/stockMovements";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
+import { ExportMovimientosButton } from "@/components/movimientosProducto/ExportMovimientosButton";
 
 const PAGE_SIZE = 25;
 
 type SearchParams = {
   code?: string;
   branchId?: string;
-  type?: string;
   from?: string;
   to?: string;
   page?: string;
@@ -25,16 +25,33 @@ type MovementRow = {
   movement_type: MovementType;
   quantity_delta: number;
   resulting_quantity: number;
-  reason: string | null;
   sale_id: string | null;
   created_at: string;
-  products: { code: string } | null;
+  products: { id: string; code: string } | null;
   branches: { name: string } | null;
   profiles: { full_name: string } | null;
 };
 
 const MOVEMENT_SELECT =
-  "id, movement_type, quantity_delta, resulting_quantity, reason, sale_id, created_at, products!inner(code), branches!inner(name), profiles(full_name)";
+  "id, movement_type, quantity_delta, resulting_quantity, sale_id, created_at, products!inner(id, code), branches!inner(name), profiles(full_name)";
+
+// Fila ya "pivotada" como en el sistema anterior: el monto de venta/devolución
+// va bajo la columna de su tipo, en vez de una columna genérica de precio.
+type DisplayRow = {
+  id: string;
+  tipoMovimiento: string;
+  fecha: string;
+  ajusteInventario: number | null;
+  cantidad: number;
+  compraCf: number | null;
+  compraSf: number | null;
+  compraMay: number | null;
+  devolucion: number | null;
+  usuario: string;
+  stockActualizado: number;
+  productCode: string;
+  branchName: string;
+};
 
 export default async function MovimientosProductoPage({
   searchParams,
@@ -57,7 +74,6 @@ export default async function MovimientosProductoPage({
   if (sp.code)
     movementsQuery = movementsQuery.ilike("products.code", `%${escapePostgrestFilterValue(sp.code)}%`);
   if (sp.branchId) movementsQuery = movementsQuery.eq("branch_id", sp.branchId);
-  if (sp.type) movementsQuery = movementsQuery.eq("movement_type", sp.type);
   if (sp.from) movementsQuery = movementsQuery.gte("created_at", sp.from);
   if (sp.to) movementsQuery = movementsQuery.lte("created_at", `${sp.to}T23:59:59`);
   const { data: movementsData, count: movementsCount } = await movementsQuery;
@@ -65,15 +81,81 @@ export default async function MovimientosProductoPage({
   const totalMovements = movementsCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalMovements / PAGE_SIZE));
 
+  // Ventas y devoluciones no guardan el monto en stock_movements — se cruza
+  // con sale_items (precio/tier) y sale_returns (monto) por (sale_id, product_id).
+  const saleIds = [...new Set(movementRows.map((m) => m.sale_id).filter((id): id is string => !!id))];
+
+  const saleItemMap = new Map<string, { priceTier: "sf" | "cf" | "may"; subtotalBs: number }>();
+  const returnMap = new Map<string, number>();
+  if (saleIds.length > 0) {
+    const [{ data: saleItemsData }, { data: returnsData }] = await Promise.all([
+      supabase.from("sale_items").select("sale_id, product_id, price_tier, subtotal_bs").in("sale_id", saleIds),
+      supabase.from("sale_returns").select("sale_id, product_id, amount_bs").in("sale_id", saleIds),
+    ]);
+    for (const item of saleItemsData ?? []) {
+      saleItemMap.set(`${item.sale_id}-${item.product_id}`, {
+        priceTier: item.price_tier as "sf" | "cf" | "may",
+        subtotalBs: item.subtotal_bs,
+      });
+    }
+    for (const ret of returnsData ?? []) {
+      const key = `${ret.sale_id}-${ret.product_id}`;
+      returnMap.set(key, (returnMap.get(key) ?? 0) + ret.amount_bs);
+    }
+  }
+
+  const rows: DisplayRow[] = movementRows
+    .filter((m) => m.products)
+    .map((m) => {
+      const key = m.sale_id && m.products ? `${m.sale_id}-${m.products.id}` : null;
+      const saleItem = key ? saleItemMap.get(key) : undefined;
+      const returnAmount = key ? returnMap.get(key) : undefined;
+
+      let ajusteInventario: number | null = null;
+      let compraCf: number | null = null;
+      let compraSf: number | null = null;
+      let compraMay: number | null = null;
+      let devolucion: number | null = null;
+
+      if (m.movement_type === "venta" && saleItem) {
+        if (saleItem.priceTier === "cf") compraCf = saleItem.subtotalBs;
+        else if (saleItem.priceTier === "sf") compraSf = saleItem.subtotalBs;
+        else compraMay = saleItem.subtotalBs;
+      } else if (m.movement_type === "devolucion") {
+        devolucion = returnAmount ?? null;
+      } else {
+        ajusteInventario = m.quantity_delta;
+      }
+
+      return {
+        id: m.id,
+        tipoMovimiento: movementTypeLabel(m.movement_type),
+        fecha: new Date(m.created_at).toLocaleString("es-BO", { dateStyle: "short", timeStyle: "short" }),
+        ajusteInventario,
+        cantidad: Math.abs(m.quantity_delta),
+        compraCf,
+        compraSf,
+        compraMay,
+        devolucion,
+        usuario: m.profiles?.full_name ?? "Sistema",
+        stockActualizado: m.resulting_quantity,
+        productCode: m.products!.code,
+        branchName: m.branches?.name ?? "—",
+      };
+    });
+
   function buildHref(targetPage: number) {
     const params = new URLSearchParams();
     if (sp.code) params.set("code", sp.code);
     if (sp.branchId) params.set("branchId", sp.branchId);
-    if (sp.type) params.set("type", sp.type);
     if (sp.from) params.set("from", sp.from);
     if (sp.to) params.set("to", sp.to);
     params.set("page", String(targetPage));
     return `/movimientos-producto?${params.toString()}`;
+  }
+
+  function fmt(value: number | null): string {
+    return value === null ? "" : String(value);
   }
 
   return (
@@ -83,8 +165,16 @@ export default async function MovimientosProductoPage({
       <Card className="p-4">
         <form className="flex flex-wrap items-end gap-3" method="get">
           <label className="block text-sm">
-            <span className="mb-1 block text-slate-600">Código</span>
+            <span className="mb-1 block text-slate-600">Código de producto</span>
             <input type="text" name="code" defaultValue={sp.code ?? ""} className={fieldInputClass} />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-slate-600">Desde</span>
+            <input type="date" name="from" defaultValue={sp.from ?? ""} className={fieldInputClass} />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-slate-600">Hasta</span>
+            <input type="date" name="to" defaultValue={sp.to ?? ""} className={fieldInputClass} />
           </label>
           <label className="block text-sm">
             <span className="mb-1 block text-slate-600">Sucursal</span>
@@ -97,64 +187,61 @@ export default async function MovimientosProductoPage({
               ))}
             </select>
           </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-600">Tipo</span>
-            <select name="type" defaultValue={sp.type ?? ""} className={fieldInputClass}>
-              <option value="">Todos</option>
-              {MOVEMENT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {movementTypeLabel(t)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-600">Desde</span>
-            <input type="date" name="from" defaultValue={sp.from ?? ""} className={fieldInputClass} />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-600">Hasta</span>
-            <input type="date" name="to" defaultValue={sp.to ?? ""} className={fieldInputClass} />
-          </label>
-          <Button type="submit">Buscar</Button>
+          <Button type="submit">Ver movimientos</Button>
+          <ButtonLink variant="secondary" href="/movimientos-producto">
+            Limpiar
+          </ButtonLink>
         </form>
       </Card>
 
-      <Card>
-        {movementRows.length === 0 ? (
+      <Card className="overflow-auto">
+        {rows.length === 0 ? (
           <EmptyState
             icon={<History className="h-6 w-6" />}
             title="Sin movimientos"
             description="Ajusta los filtros de búsqueda."
           />
         ) : (
-          <ul className="divide-y divide-slate-200">
-            {movementRows.map((m) => (
-              <li key={m.id} className="px-4 py-3 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium text-slate-800">
-                    {m.products?.code ?? "—"}{" "}
-                    <span className="font-normal text-slate-400">· {m.branches?.name ?? "—"}</span>
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    {new Date(m.created_at).toLocaleString("es-BO", {
-                      dateStyle: "short",
-                      timeStyle: "short",
-                    })}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500">
-                  {movementTypeLabel(m.movement_type)} · {m.quantity_delta > 0 ? "+" : ""}
-                  {m.quantity_delta} · Stock resultante: {m.resulting_quantity} ·{" "}
-                  {m.profiles?.full_name ?? "Sistema"}
-                  {m.reason ? ` · ${m.reason}` : ""}
-                  {m.sale_id ? ` · Venta ${m.sale_id.slice(0, 8)}` : ""}
-                </p>
-              </li>
-            ))}
-          </ul>
+          <table className="w-full min-w-[900px] text-sm">
+            <thead className="border-b border-slate-200 text-left text-xs uppercase text-slate-400">
+              <tr>
+                <th className="px-4 py-2">Tipo movimiento</th>
+                <th className="px-4 py-2">Fecha</th>
+                <th className="px-4 py-2">Ajuste de inventario</th>
+                <th className="px-4 py-2">Cantidad</th>
+                <th className="px-4 py-2">Compra CF</th>
+                <th className="px-4 py-2">Compra SF</th>
+                <th className="px-4 py-2">Compra MAY</th>
+                <th className="px-4 py-2">Devolución</th>
+                <th className="px-4 py-2">Usuario</th>
+                <th className="px-4 py-2">Stock actualizado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="px-4 py-2 font-medium text-slate-800">{r.tipoMovimiento}</td>
+                  <td className="px-4 py-2 text-slate-500">{r.fecha}</td>
+                  <td className="px-4 py-2 text-slate-500">{fmt(r.ajusteInventario)}</td>
+                  <td className="px-4 py-2 text-slate-500">{r.cantidad}</td>
+                  <td className="px-4 py-2 text-slate-500">{fmt(r.compraCf)}</td>
+                  <td className="px-4 py-2 text-slate-500">{fmt(r.compraSf)}</td>
+                  <td className="px-4 py-2 text-slate-500">{fmt(r.compraMay)}</td>
+                  <td className="px-4 py-2 text-slate-500">{fmt(r.devolucion)}</td>
+                  <td className="px-4 py-2 text-slate-500">{r.usuario}</td>
+                  <td className="px-4 py-2 font-medium text-slate-800">{r.stockActualizado}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </Card>
+
+      {rows.length > 0 && (
+        <p className="text-lg font-semibold text-slate-800">
+          Stock actualizado: {rows[0].stockActualizado}
+        </p>
+      )}
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-slate-500">
@@ -180,6 +267,25 @@ export default async function MovimientosProductoPage({
             </Button>
           )}
         </div>
+      )}
+
+      {rows.length > 0 && (
+        <ExportMovimientosButton
+          rows={rows.map((r) => ({
+            "Tipo movimiento": r.tipoMovimiento,
+            Fecha: r.fecha,
+            "Código producto": r.productCode,
+            Sucursal: r.branchName,
+            "Ajuste de inventario": r.ajusteInventario ?? "",
+            Cantidad: r.cantidad,
+            "Compra CF": r.compraCf ?? "",
+            "Compra SF": r.compraSf ?? "",
+            "Compra MAY": r.compraMay ?? "",
+            Devolución: r.devolucion ?? "",
+            Usuario: r.usuario,
+            "Stock actualizado": r.stockActualizado,
+          }))}
+        />
       )}
     </div>
   );
