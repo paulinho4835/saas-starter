@@ -54,6 +54,30 @@ function priceForSaleType(product: ProductResult, saleType: SaleType): number {
   return product.priceMayBs;
 }
 
+type PriceTier = "cf" | "sf" | "may";
+
+// Tipo de venta representativo de cada tier, para cuando se agrega un
+// producto haciendo clic directo en una fila CF/SF/MAY (en vez de elegir el
+// tipo de venta primero) — el usuario puede afinar a la variante QR después
+// desde el selector "Tipo de venta" si corresponde.
+const DEFAULT_SALE_TYPE_FOR_TIER: Record<PriceTier, SaleType> = {
+  cf: "con_factura",
+  sf: "sin_factura",
+  may: "mayorista",
+};
+
+const TIER_LABEL: Record<PriceTier, string> = { cf: "CF", sf: "SF", may: "MAY" };
+const TIER_PRICE: Record<PriceTier, keyof ProductResult> = {
+  cf: "priceCfBs",
+  sf: "priceSfBs",
+  may: "priceMayBs",
+};
+const TIER_ROW_CLASS: Record<PriceTier, string> = {
+  cf: "bg-emerald-200",
+  sf: "bg-amber-100",
+  may: "bg-rose-200",
+};
+
 export function SalePanel({
   products,
 }: {
@@ -116,6 +140,39 @@ export function SalePanel({
         return { ...line, unitPriceBs: String(priceForSaleType(product, next)) };
       }),
     );
+  }
+
+  // Clic directo en una fila CF/SF/MAY de la tabla: cambia el tipo de venta
+  // al de ese tier (recalculando el resto del carrito) y agrega la línea con
+  // el precio de ESE tier, sin depender del estado `saleType` (que todavía no
+  // se actualizó cuando corre este mismo handler).
+  function selectTierAndAdd(product: ProductResult, tier: PriceTier) {
+    const nextSaleType = DEFAULT_SALE_TYPE_FOR_TIER[tier];
+    if (nextSaleType !== saleType) changeSaleType(nextSaleType);
+    setCart((prev) => [
+      ...prev,
+      {
+        productId: product.id,
+        code: product.code,
+        unitPriceBs: String(product[TIER_PRICE[tier]]),
+        quantity: "1",
+        maxStock: product.stock,
+      },
+    ]);
+  }
+
+  // "Equiv": busca repuestos equivalentes (mismas medidas, ±0.5mm de
+  // tolerancia — mismo criterio que lib/measurementSearch.ts) sin importar
+  // marca/código. El carrito no se pierde: sigue siendo el mismo componente,
+  // solo cambian los resultados que le llegan por props.
+  function searchEquivalents(product: ProductResult) {
+    const params = new URLSearchParams();
+    if (product.internalMm !== null) params.set("mi", String(product.internalMm));
+    if (product.externalMm !== null) params.set("me", String(product.externalMm));
+    if (product.heightMm !== null) params.set("alt", String(product.heightMm));
+    if (product.flangeMm !== null) params.set("pest", String(product.flangeMm));
+    if (product.stopMm !== null) params.set("tope", String(product.stopMm));
+    router.push(`/ventas?${params.toString()}`);
   }
 
   function updateLine(index: number, patch: Partial<CartLine>) {
@@ -220,72 +277,68 @@ export function SalePanel({
         )}
 
         <Card className="max-h-[75vh] overflow-auto">
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="w-full min-w-[820px] text-sm">
           <thead className="sticky top-0 z-10 bg-white">
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-3 py-2"></th>
               <th className="px-3 py-2">Código</th>
               <th className="px-3 py-2">Marca</th>
               <th className="px-3 py-2">Stock</th>
-              <th className="bg-emerald-100 px-3 py-2 text-center text-emerald-800">CF</th>
-              <th className="bg-amber-100 px-3 py-2 text-center text-amber-800">SF</th>
-              <th className="bg-rose-100 px-3 py-2 text-center text-rose-800">MAY</th>
-              <th className="px-3 py-2"></th>
+              <th className="px-3 py-2">Tipo</th>
+              <th className="px-3 py-2">Precios Bs</th>
               <th className="px-3 py-2">MI</th>
               <th className="px-3 py-2">ME</th>
               <th className="px-3 py-2">ALT</th>
               <th className="px-3 py-2">PEST</th>
               <th className="px-3 py-2">TOPE</th>
+              <th className="px-3 py-2">Equiv</th>
             </tr>
           </thead>
           <tbody>
             {products.map((p) => {
               const outOfStock = p.stock <= 0;
               const activeTier = priceTierForSaleType(saleType);
-              return (
-                <tr
-                  key={p.id}
-                  className={`border-b border-slate-100 ${outOfStock ? "opacity-50" : ""}`}
-                >
-                  <td className="px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => togglePin(p)}
-                      className={`rounded p-1 hover:bg-slate-100 ${pinnedIds.has(p.id) ? "text-brand-600" : "text-slate-300"}`}
-                      title={pinnedIds.has(p.id) ? "Desanclar" : "Anclar"}
-                    >
-                      {pinnedIds.has(p.id) ? <Pin className="h-4 w-4 fill-current" /> : <Pin className="h-4 w-4" />}
-                    </button>
-                  </td>
-                  <td className="px-3 py-2">
-                    <p className="font-medium text-slate-800">{p.code}</p>
-                    <p className="text-xs text-slate-500">{p.application || "—"}</p>
-                  </td>
-                  <td className="px-3 py-2">{p.brandName}</td>
-                  <td className={`px-3 py-2 ${outOfStock ? "text-red-500" : ""}`}>{p.stock}</td>
-                  <td
-                    className={`bg-emerald-50 px-3 py-2 text-center text-emerald-900 ${activeTier === "cf" ? "font-bold ring-1 ring-inset ring-emerald-400" : ""}`}
-                  >
-                    {p.priceCfBs}
-                  </td>
-                  <td
-                    className={`bg-amber-50 px-3 py-2 text-center text-amber-900 ${activeTier === "sf" ? "font-bold ring-1 ring-inset ring-amber-400" : ""}`}
-                  >
-                    {p.priceSfBs}
-                  </td>
-                  <td
-                    className={`bg-rose-50 px-3 py-2 text-center text-rose-900 ${activeTier === "may" ? "font-bold ring-1 ring-inset ring-rose-400" : ""}`}
-                  >
-                    {p.priceMayBs}
-                  </td>
+              const tiers: PriceTier[] = ["cf", "sf", "may"];
+              return tiers.map((tier, i) => (
+                <tr key={`${p.id}-${tier}`} className={`${TIER_ROW_CLASS[tier]} ${outOfStock ? "opacity-50" : ""}`}>
+                  {i === 0 && (
+                    <td className="px-3 py-2 align-top" rowSpan={3}>
+                      <button
+                        type="button"
+                        onClick={() => togglePin(p)}
+                        className={`rounded p-1 hover:bg-white/50 ${pinnedIds.has(p.id) ? "text-brand-700" : "text-slate-400"}`}
+                        title={pinnedIds.has(p.id) ? "Desanclar" : "Anclar"}
+                      >
+                        {pinnedIds.has(p.id) ? <Pin className="h-4 w-4 fill-current" /> : <Pin className="h-4 w-4" />}
+                      </button>
+                    </td>
+                  )}
+                  {i === 0 && (
+                    <td className="px-3 py-2 align-top" rowSpan={3}>
+                      <p className="font-medium text-slate-800">{p.code}</p>
+                      <p className="text-xs text-slate-500">{p.application || "—"}</p>
+                    </td>
+                  )}
+                  {i === 0 && (
+                    <td className="px-3 py-2 align-top" rowSpan={3}>
+                      {p.brandName}
+                    </td>
+                  )}
+                  {i === 0 && (
+                    <td className={`px-3 py-2 align-top font-semibold ${outOfStock ? "text-red-700" : "text-red-600"}`} rowSpan={3}>
+                      {p.stock}
+                    </td>
+                  )}
+                  <td className="px-3 py-2 font-medium text-slate-700">{TIER_LABEL[tier]}</td>
                   <td className="px-3 py-2">
                     <button
                       type="button"
                       disabled={outOfStock}
-                      onClick={() => addToCart(p)}
-                      className="rounded bg-brand-50 px-2 py-1 font-medium text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-slate-400"
+                      onClick={() => selectTierAndAdd(p, tier)}
+                      className={`rounded bg-white px-2 py-1 font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 ${activeTier === tier ? "ring-2 ring-brand-500" : ""}`}
+                      title="Agregar al carrito con este tipo de venta"
                     >
-                      Agregar
+                      {p[TIER_PRICE[tier]]}
                     </button>
                   </td>
                   <td className="px-3 py-2">{formatMm(p.internalMm)}</td>
@@ -293,8 +346,20 @@ export function SalePanel({
                   <td className="px-3 py-2">{formatMm(p.heightMm)}</td>
                   <td className="px-3 py-2">{formatMm(p.flangeMm)}</td>
                   <td className="px-3 py-2">{formatMm(p.stopMm)}</td>
+                  <td className="px-3 py-2">
+                    {tier === "sf" && (
+                      <button
+                        type="button"
+                        onClick={() => searchEquivalents(p)}
+                        className="rounded bg-white px-2 py-1 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                        title="Buscar repuestos con las mismas medidas (±0.5mm)"
+                      >
+                        Equiv
+                      </button>
+                    )}
+                  </td>
                 </tr>
-              );
+              ));
             })}
           </tbody>
         </table>
