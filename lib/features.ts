@@ -28,22 +28,24 @@ export interface FeatureMeta {
   optIn?: boolean;
 }
 
-// Orden = orden en el menú lateral.
+// Orden = orden en el menú lateral. Orden pedido por el cliente (replica el
+// menú de su sistema anterior); lo que no coincide queda al final, oculto
+// del nav vía NAV_WHITELIST en lib/rbac.ts (sin borrar el módulo).
 export const FEATURES: FeatureMeta[] = [
-  { key: "dashboard", label: "Inicio", href: "/dashboard", core: true },
-  { key: "clientes", label: "Clientes", href: "/clientes" },
-  { key: "items", label: "Inventario", href: "/items", optIn: true },
   { key: "productos", label: "Productos", href: "/productos", optIn: true },
+  { key: "usuarios", label: "Usuarios", href: "/usuarios", core: true },
   { key: "proveedores", label: "Proveedores", href: "/proveedores", optIn: true },
   { key: "ventas", label: "Ventas", href: "/ventas", optIn: true },
   { key: "ajuste_inventario", label: "Ajuste de Inventario", href: "/ajuste-inventario", optIn: true },
-  { key: "movimientos_producto", label: "Movimientos de Producto", href: "/movimientos-producto", optIn: true },
-  { key: "reporte_ventas", label: "Reporte de Ventas", href: "/reporte-ventas", optIn: true },
-  { key: "devoluciones", label: "Devoluciones", href: "/devoluciones", optIn: true },
-  { key: "almacen", label: "Almacén", href: "/almacen", optIn: true },
   { key: "traspasos", label: "Traspasos", href: "/traspasos", optIn: true },
+  { key: "devoluciones", label: "Devoluciones", href: "/devoluciones", optIn: true },
+  { key: "reporte_ventas", label: "Reporte de Ventas", href: "/reporte-ventas", optIn: true },
+  { key: "movimientos_producto", label: "Movimientos de Producto", href: "/movimientos-producto", optIn: true },
+  { key: "dashboard", label: "Inicio", href: "/dashboard", core: true },
+  { key: "clientes", label: "Clientes", href: "/clientes" },
+  { key: "items", label: "Inventario", href: "/items", optIn: true },
+  { key: "almacen", label: "Almacén", href: "/almacen", optIn: true },
   { key: "pedidos", label: "Pedidos", href: "/pedidos", optIn: true },
-  { key: "usuarios", label: "Usuarios", href: "/usuarios", core: true },
   { key: "ajustes", label: "Ajustes", href: "/ajustes", core: true },
   { key: "auditoria", label: "Auditoría", href: "/auditoria", optIn: true },
 ];

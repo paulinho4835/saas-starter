@@ -5,37 +5,29 @@ export type Role = "admin" | "manager" | "member" | "viewer";
 
 // Módulos del menú lateral visibles por rol.
 const NAV_WHITELIST: Record<Role, FeatureKey[]> = {
+  // Orden y contenido = menú pedido por el cliente (replica su sistema
+  // anterior). dashboard/clientes/items/almacen/pedidos/ajustes/auditoria
+  // siguen existiendo (rutas y features intactas), solo ocultos del nav.
   admin: [
-    "dashboard",
-    "clientes",
-    "items",
     "productos",
+    "usuarios",
     "proveedores",
     "ventas",
     "ajuste_inventario",
-    "movimientos_producto",
-    "reporte_ventas",
-    "devoluciones",
-    "almacen",
     "traspasos",
-    "pedidos",
-    "usuarios",
-    "ajustes",
-    "auditoria",
+    "devoluciones",
+    "reporte_ventas",
+    "movimientos_producto",
   ],
   manager: [
-    "dashboard",
-    "clientes",
-    "items",
     "productos",
     "proveedores",
     "ventas",
     "ajuste_inventario",
-    "movimientos_producto",
-    "reporte_ventas",
-    "devoluciones",
     "traspasos",
-    "pedidos",
+    "devoluciones",
+    "reporte_ventas",
+    "movimientos_producto",
   ],
   member: ["dashboard", "clientes", "productos", "proveedores", "ventas"],
   viewer: ["dashboard", "clientes", "productos", "proveedores"],
