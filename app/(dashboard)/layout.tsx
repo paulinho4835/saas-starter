@@ -10,6 +10,8 @@ import { ConfirmHost } from "@/components/ui/ConfirmHost";
 import { getInitials } from "@/lib/format";
 import { TermsGate } from "@/components/legal/TermsGate";
 import { LEGAL_VERSION } from "@/lib/legal";
+import { getImpersonationOrgName } from "@/lib/impersonation";
+import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 
 export default async function DashboardLayout({
   children,
@@ -124,8 +126,11 @@ export default async function DashboardLayout({
     ? "Operador de plataforma"
     : `${profile?.full_name ?? ""} · ${ROLE_LABEL[profile?.role ?? ""] ?? profile?.role ?? ""}`;
 
+  const impersonatingOrgName = await getImpersonationOrgName();
+
   return (
     <div className="flex min-h-screen flex-col">
+      {impersonatingOrgName && <ImpersonationBanner orgName={impersonatingOrgName} />}
       <div className="flex flex-1 flex-col md:flex-row">
         <Sidebar
           orgName={orgName}

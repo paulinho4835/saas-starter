@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/lib/toast";
 import { FEATURES, normalizeFeatures } from "@/lib/features";
-import { toggleFeature, setOrgActive } from "@/app/(dashboard)/superadmin/actions";
+import { toggleFeature, setOrgActive, startImpersonation } from "@/app/(dashboard)/superadmin/actions";
 
 export type OrgRow = {
   id: string;
@@ -48,6 +48,17 @@ export function OrgCard({ org }: { org: OrgRow }) {
     router.refresh();
   }
 
+  async function onImpersonate() {
+    setBusy(true);
+    const res = await startImpersonation(org.id);
+    setBusy(false);
+    // startImpersonation redirige (server-side) si tiene éxito; solo llega
+    // acá con un valor si falló.
+    if (res && !res.ok) {
+      toast(res.error ?? "No se pudo iniciar la vista.", "error");
+    }
+  }
+
   return (
     <Card className="p-5">
       <div className="flex items-start justify-between gap-3">
@@ -55,14 +66,19 @@ export function OrgCard({ org }: { org: OrgRow }) {
           <h3 className="font-semibold text-slate-800">{org.name}</h3>
           {!org.active && <Badge tone="danger">Suspendida</Badge>}
         </div>
-        <Button
-          size="sm"
-          variant={org.active ? "danger" : "secondary"}
-          onClick={onToggleActive}
-          disabled={busy}
-        >
-          {org.active ? "Suspender" : "Reactivar"}
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          <Button size="sm" variant="secondary" onClick={onImpersonate} disabled={busy || !org.active}>
+            Ver como
+          </Button>
+          <Button
+            size="sm"
+            variant={org.active ? "danger" : "secondary"}
+            onClick={onToggleActive}
+            disabled={busy}
+          >
+            {org.active ? "Suspender" : "Reactivar"}
+          </Button>
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
