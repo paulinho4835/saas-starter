@@ -8,7 +8,7 @@ import { SALE_TYPE_LABEL, type SaleType } from "@/lib/saleType";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
 import { ReturnRowAction } from "@/components/devoluciones/ReturnRowAction";
 
@@ -110,16 +110,16 @@ export default async function DevolucionesPage({
       <Card className="p-4">
         <form className="flex flex-wrap items-end gap-3" method="get">
           <label className="block text-sm">
+            <span className="mb-1 block text-slate-600">Nombre o NIT cliente</span>
+            <input type="text" name="q" defaultValue={sp.q ?? ""} className={`${fieldInputClass} w-56`} />
+          </label>
+          <label className="block text-sm">
             <span className="mb-1 block text-slate-600">Desde</span>
             <input type="date" name="from" defaultValue={from} className={fieldInputClass} />
           </label>
           <label className="block text-sm">
             <span className="mb-1 block text-slate-600">Hasta</span>
             <input type="date" name="to" defaultValue={to} className={fieldInputClass} />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-slate-600">Cliente (nombre o NIT)</span>
-            <input type="text" name="q" defaultValue={sp.q ?? ""} className={`${fieldInputClass} w-56`} />
           </label>
           <label className="block text-sm">
             <span className="mb-1 block text-slate-600">Sucursal</span>
@@ -133,6 +133,9 @@ export default async function DevolucionesPage({
             </select>
           </label>
           <Button type="submit">Buscar Ventas</Button>
+          <ButtonLink variant="secondary" href="/devoluciones">
+            Limpiar
+          </ButtonLink>
         </form>
       </Card>
 
@@ -148,49 +151,58 @@ export default async function DevolucionesPage({
             <table className="w-full min-w-[1100px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2">Fecha</th>
                   <th className="px-3 py-2">Sucursal</th>
+                  <th className="px-3 py-2">Fecha de venta</th>
                   <th className="px-3 py-2">Tipo de venta</th>
-                  <th className="px-3 py-2">Cliente</th>
-                  <th className="px-3 py-2">NIT</th>
-                  <th className="px-3 py-2">Código</th>
-                  <th className="px-3 py-2">Precio (Bs)</th>
-                  <th className="px-3 py-2">Vendido</th>
+                  <th className="px-3 py-2">Nombre cliente</th>
+                  <th className="px-3 py-2">NIT cliente</th>
+                  <th className="px-3 py-2">Producto</th>
+                  <th className="px-3 py-2">Precio venta</th>
+                  <th className="px-3 py-2">Nro pedidos</th>
                   <th className="px-3 py-2">Devuelto</th>
                   <th className="px-3 py-2">Restante</th>
                   <th className="px-3 py-2">Devolución</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
-                  const returned = returnedByItem.get(row.id) ?? 0;
-                  const remaining = row.quantity - returned;
-                  return (
-                    <tr key={row.id} className="border-b border-slate-100">
-                      <td className="px-3 py-2 text-slate-500">{formatDateTime(row.sales!.created_at)}</td>
-                      <td className="px-3 py-2">{row.sales!.branches?.name ?? "—"}</td>
-                      <td className="px-3 py-2 text-slate-500">
-                        {SALE_TYPE_LABEL[row.sales!.sale_type as SaleType]}
-                      </td>
-                      <td className="px-3 py-2">{row.sales!.customers?.full_name ?? "Mostrador"}</td>
-                      <td className="px-3 py-2 text-slate-500">{row.sales!.customers?.nit ?? "—"}</td>
-                      <td className="px-3 py-2 font-medium text-slate-800">{row.products?.code ?? "—"}</td>
-                      <td className="px-3 py-2">{row.unit_price_bs}</td>
-                      <td className="px-3 py-2">{row.quantity}</td>
-                      <td className="px-3 py-2">{returned}</td>
-                      <td className="px-3 py-2">{remaining}</td>
-                      <td className="px-3 py-2">
-                        {!canReturn ? (
-                          <span className="text-xs text-slate-400">Sin permiso</span>
-                        ) : remaining <= 0 ? (
-                          <span className="text-xs text-slate-400">Devuelto completo</span>
-                        ) : (
-                          <ReturnRowAction saleItemId={row.id} max={remaining} />
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {(() => {
+                  let band = 0;
+                  let prevCreatedAt: string | null = null;
+                  return rows.map((row) => {
+                    const createdAt = row.sales!.created_at;
+                    if (createdAt !== prevCreatedAt) {
+                      band = 1 - band;
+                      prevCreatedAt = createdAt;
+                    }
+                    const returned = returnedByItem.get(row.id) ?? 0;
+                    const remaining = row.quantity - returned;
+                    return (
+                      <tr key={row.id} className={band === 0 ? "bg-emerald-100" : "bg-yellow-100"}>
+                        <td className="px-3 py-2">{row.sales!.branches?.name ?? "—"}</td>
+                        <td className="px-3 py-2 text-slate-500">{formatDateTime(createdAt)}</td>
+                        <td className="px-3 py-2 text-slate-500">
+                          {SALE_TYPE_LABEL[row.sales!.sale_type as SaleType]}
+                        </td>
+                        <td className="px-3 py-2">{row.sales!.customers?.full_name ?? "Mostrador"}</td>
+                        <td className="px-3 py-2 text-slate-500">{row.sales!.customers?.nit ?? "—"}</td>
+                        <td className="px-3 py-2 font-medium text-slate-800">{row.products?.code ?? "—"}</td>
+                        <td className="px-3 py-2">{row.unit_price_bs}</td>
+                        <td className="px-3 py-2">{row.quantity}</td>
+                        <td className="px-3 py-2">{returned}</td>
+                        <td className="px-3 py-2">{remaining}</td>
+                        <td className="px-3 py-2">
+                          {!canReturn ? (
+                            <span className="text-xs text-slate-400">Sin permiso</span>
+                          ) : remaining <= 0 ? (
+                            <span className="text-xs text-slate-400">Devuelto completo</span>
+                          ) : (
+                            <ReturnRowAction saleItemId={row.id} max={remaining} />
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>
