@@ -55,10 +55,16 @@ type ProductRow = {
   price_may_bs: number;
   product_brands: { name: string } | null;
   product_families: { name: string } | null;
+  product_origins: { name: string } | null;
 };
 
 const PRODUCT_SELECT =
-  "id, code, brand_id, family_id, origin_id, supplier_id, internal_mm, external_mm, height_mm, flange_mm, stop_mm, application, cost_usd, exchange_rate, margin_sf_pct, margin_cf_pct, margin_may_pct, price_sf_bs, price_cf_bs, price_may_bs, product_brands(name), product_families(name)";
+  "id, code, brand_id, family_id, origin_id, supplier_id, internal_mm, external_mm, height_mm, flange_mm, stop_mm, application, cost_usd, exchange_rate, margin_sf_pct, margin_cf_pct, margin_may_pct, price_sf_bs, price_cf_bs, price_may_bs, product_brands(name), product_families(name), product_origins(name)";
+
+function fmt(value: number | null): string {
+  if (value === null) return "—";
+  return String(Number(value.toFixed(2)));
+}
 
 export default async function ProductosPage({
   searchParams,
@@ -69,6 +75,8 @@ export default async function ProductosPage({
     page?: string;
     brandId?: string;
     familyId?: string;
+    originId?: string;
+    supplierId?: string;
   }>;
 }) {
   await requireNavAccess("productos");
@@ -118,6 +126,8 @@ export default async function ProductosPage({
     }
     if (sp.brandId) query = query.eq("brand_id", sp.brandId);
     if (sp.familyId) query = query.eq("family_id", sp.familyId);
+    if (sp.originId) query = query.eq("origin_id", sp.originId);
+    if (sp.supplierId) query = query.eq("supplier_id", sp.supplierId);
 
     const { data, count } = await query;
     products = (data ?? []) as unknown as ProductRow[];
@@ -152,6 +162,8 @@ export default async function ProductosPage({
     if (sp.q) params.set("q", sp.q);
     if (sp.brandId) params.set("brandId", sp.brandId);
     if (sp.familyId) params.set("familyId", sp.familyId);
+    if (sp.originId) params.set("originId", sp.originId);
+    if (sp.supplierId) params.set("supplierId", sp.supplierId);
     return `/productos?${params.toString()}`;
   }
 
@@ -232,11 +244,33 @@ export default async function ProductosPage({
                   ))}
                 </select>
               </label>
+              <label className="block text-sm">
+                <span className="mb-1 block text-slate-600">Procedencia</span>
+                <select name="originId" defaultValue={sp.originId ?? ""} className={fieldInputClass}>
+                  <option value="">Todas</option>
+                  {origins.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm">
+                <span className="mb-1 block text-slate-600">Proveedor</span>
+                <select name="supplierId" defaultValue={sp.supplierId ?? ""} className={fieldInputClass}>
+                  <option value="">Todos</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <Button type="submit">Buscar</Button>
             </form>
           </Card>
 
-          <Card>
+          <Card className="overflow-auto">
             {products.length === 0 ? (
               <EmptyState
                 icon={<Wrench className="h-6 w-6" />}
@@ -244,39 +278,80 @@ export default async function ProductosPage({
                 description="Crea el primer producto o importa un Excel."
               />
             ) : (
-              <ul className="divide-y divide-slate-200">
-                {products.map((p) => (
-                  <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-800">
-                        {p.code}{" "}
-                        <span className="font-normal text-slate-400">
-                          · {p.product_brands?.name ?? "—"} · {p.product_families?.name ?? "—"}
-                        </span>
-                      </p>
-                      <p className="truncate text-xs text-slate-500">{p.application || "—"}</p>
-                      <p className="text-xs text-slate-400">
-                        CF {p.price_cf_bs} Bs · SF {p.price_sf_bs} Bs · MAY {p.price_may_bs} Bs
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {canWriteProductos && (
-                        <ProductFormModal
-                          mode="edit"
-                          product={p}
-                          stock={stockByProduct.get(p.id)}
-                          brands={brands}
-                          families={families}
-                          origins={origins}
-                          suppliers={suppliers}
-                          branches={branches}
-                        />
-                      )}
-                      {canDeleteProductos && <DeleteProductButton id={p.id} code={p.code} />}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <table className="w-full min-w-[1200px] text-sm">
+                <thead className="border-b border-slate-200 text-left text-xs uppercase text-slate-400">
+                  <tr>
+                    <th className="px-3 py-2">Familia</th>
+                    <th className="px-3 py-2">Código producto</th>
+                    <th className="px-3 py-2">Marca</th>
+                    <th className="px-3 py-2">Stock</th>
+                    <th className="px-3 py-2">Costo $</th>
+                    <th className="bg-emerald-100 px-3 py-2 text-center text-emerald-800">CF %</th>
+                    <th className="bg-amber-100 px-3 py-2 text-center text-amber-800">SF %</th>
+                    <th className="bg-rose-100 px-3 py-2 text-center text-rose-800">MAY %</th>
+                    <th className="px-3 py-2">MI</th>
+                    <th className="px-3 py-2">ME</th>
+                    <th className="px-3 py-2">ALT</th>
+                    <th className="px-3 py-2">PEST</th>
+                    <th className="px-3 py-2">TOPE</th>
+                    <th className="px-3 py-2">Aplicación</th>
+                    <th className="px-3 py-2">Procedencia</th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {products.map((p) => {
+                    const totalStock = (stockByProduct.get(p.id) ?? []).reduce(
+                      (sum, s) => sum + s.quantity,
+                      0,
+                    );
+                    return (
+                      <tr key={p.id}>
+                        <td className="px-3 py-2 text-slate-500">{p.product_families?.name ?? "—"}</td>
+                        <td className="px-3 py-2 font-medium text-slate-800">{p.code}</td>
+                        <td className="px-3 py-2 text-slate-500">{p.product_brands?.name ?? "—"}</td>
+                        <td className="px-3 py-2 font-semibold text-red-600">{totalStock}</td>
+                        <td className="px-3 py-2 text-slate-500">{fmt(p.cost_usd)}</td>
+                        <td className="bg-emerald-50 px-3 py-2 text-center text-emerald-900">
+                          {fmt(p.margin_cf_pct)}
+                        </td>
+                        <td className="bg-amber-50 px-3 py-2 text-center text-amber-900">
+                          {fmt(p.margin_sf_pct)}
+                        </td>
+                        <td className="bg-rose-50 px-3 py-2 text-center text-rose-900">
+                          {fmt(p.margin_may_pct)}
+                        </td>
+                        <td className="px-3 py-2 text-slate-500">{fmt(p.internal_mm)}</td>
+                        <td className="px-3 py-2 text-slate-500">{fmt(p.external_mm)}</td>
+                        <td className="px-3 py-2 text-slate-500">{fmt(p.height_mm)}</td>
+                        <td className="px-3 py-2 text-slate-500">{fmt(p.flange_mm)}</td>
+                        <td className="px-3 py-2 text-slate-500">{fmt(p.stop_mm)}</td>
+                        <td className="max-w-[200px] truncate px-3 py-2 text-slate-500">
+                          {p.application || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-500">{p.product_origins?.name ?? "—"}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1">
+                            {canWriteProductos && (
+                              <ProductFormModal
+                                mode="edit"
+                                product={p}
+                                stock={stockByProduct.get(p.id)}
+                                brands={brands}
+                                families={families}
+                                origins={origins}
+                                suppliers={suppliers}
+                                branches={branches}
+                              />
+                            )}
+                            {canDeleteProductos && <DeleteProductButton id={p.id} code={p.code} />}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             )}
           </Card>
 
