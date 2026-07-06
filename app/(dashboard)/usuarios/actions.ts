@@ -4,12 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { inviteOrgUser } from "@/lib/inviteUser";
-import type { Role } from "@/lib/rbac";
 import { ASSIGNABLE_MODULES, type AssignableModuleKey } from "@/lib/features";
 
-const inviteSchema = z.object({
+const createUserSchema = z.object({
   email: z.string().trim().email("Correo inválido."),
+  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres."),
   fullName: z.string().trim().min(1, "El nombre es obligatorio.").max(120),
   role: z.enum(["admin", "manager", "member", "viewer"]),
   branchId: z.string().trim().optional(),
@@ -17,18 +16,20 @@ const inviteSchema = z.object({
 
 export type ActionResult = { ok: boolean; error?: string };
 
-// Invita a un nuevo usuario a la organización del admin actual. Usa el cliente
-// service-role (createAdminClient) SOLO tras verificar que el llamante es admin
-// de su organización; el org_id se toma del perfil, nunca del formulario.
-export async function inviteTeamUser(formData: FormData): Promise<ActionResult> {
+// Crea un usuario del equipo con la contraseña que define el admin (no envía
+// correo ni invitación: el admin le entrega la contraseña directamente al
+// trabajador). Usa el cliente service-role SOLO tras verificar que el llamante
+// es admin de su organización; el org_id se toma del perfil, nunca del formulario.
+export async function createTeamUser(formData: FormData): Promise<ActionResult> {
   const profile = await getProfile();
   if (!profile) return { ok: false, error: "Sesión no válida." };
   if (profile.role !== "admin") {
-    return { ok: false, error: "Solo el administrador puede invitar usuarios." };
+    return { ok: false, error: "Solo el administrador puede crear usuarios." };
   }
 
-  const parsed = inviteSchema.safeParse({
+  const parsed = createUserSchema.safeParse({
     email: formData.get("email"),
+    password: formData.get("password"),
     fullName: formData.get("fullName"),
     role: formData.get("role"),
     branchId: formData.get("branchId") || undefined,
@@ -38,14 +39,27 @@ export async function inviteTeamUser(formData: FormData): Promise<ActionResult> 
   }
 
   const admin = createAdminClient();
-  const res = await inviteOrgUser(admin, {
+  const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email: parsed.data.email,
-    fullName: parsed.data.fullName,
-    orgId: profile.orgId,
-    role: parsed.data.role as Role,
-    branchId: parsed.data.branchId || null,
+    password: parsed.data.password,
+    email_confirm: true,
+    user_metadata: { full_name: parsed.data.fullName },
   });
-  if (!res.ok) return { ok: false, error: res.error };
+  if (createErr || !created.user) {
+    return { ok: false, error: createErr?.message ?? "No se pudo crear el usuario." };
+  }
+
+  const { error: profErr } = await admin.from("profiles").insert({
+    id: created.user.id,
+    org_id: profile.orgId,
+    role: parsed.data.role,
+    full_name: parsed.data.fullName,
+    branch_id: parsed.data.branchId || null,
+  });
+  if (profErr) {
+    await admin.auth.admin.deleteUser(created.user.id); // rollback
+    return { ok: false, error: `No se pudo crear el perfil: ${profErr.message}` };
+  }
 
   revalidatePath("/usuarios");
   return { ok: true };

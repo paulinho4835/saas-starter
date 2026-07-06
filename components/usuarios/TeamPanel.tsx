@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { toast } from "@/lib/toast";
 import { confirm } from "@/lib/confirm";
 import type { AssignableModuleKey } from "@/lib/features";
-import { inviteTeamUser, setUserActive, setUserBranch } from "@/app/(dashboard)/usuarios/actions";
+import { createTeamUser, setUserActive, setUserBranch } from "@/app/(dashboard)/usuarios/actions";
 import { PermissionsModal } from "@/components/usuarios/PermissionsModal";
 
 export type TeamMember = {
@@ -43,17 +43,17 @@ export function TeamPanel({
   const [permissionsFor, setPermissionsFor] = useState<TeamMember | null>(null);
   const router = useRouter();
 
-  async function onInvite(e: React.FormEvent<HTMLFormElement>) {
+  async function onCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     const form = e.currentTarget;
-    const res = await inviteTeamUser(new FormData(form));
+    const res = await createTeamUser(new FormData(form));
     setLoading(false);
     if (!res.ok) {
-      toast(res.error ?? "No se pudo invitar.", "error");
+      toast(res.error ?? "No se pudo crear el usuario.", "error");
       return;
     }
-    toast("Invitación enviada por correo.");
+    toast("Usuario creado. Entrégale el correo y la contraseña.");
     form.reset();
     router.refresh();
   }
@@ -79,13 +79,22 @@ export function TeamPanel({
   return (
     <div className="space-y-6">
       <Card className="p-5">
-        <h2 className="font-semibold text-slate-800">Invitar usuario</h2>
+        <h2 className="font-semibold text-slate-800">Crear usuario</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Recibirá un correo para definir su contraseña y activar su cuenta.
+          Define la contraseña y entrégasela tú mismo al trabajador. El correo
+          puede ser inventado (ej. juan@retenes.local), solo se usa para
+          iniciar sesión.
         </p>
-        <form onSubmit={onInvite} className="mt-4 grid gap-3 sm:grid-cols-2">
+        <form onSubmit={onCreate} className="mt-4 grid gap-3 sm:grid-cols-2">
           <Field label="Nombre completo" name="fullName" required />
           <Field label="Correo" name="email" type="email" required />
+          <Field
+            label="Contraseña"
+            name="password"
+            type="text"
+            required
+            minLength={6}
+          />
           <label className="block text-sm">
             <FieldLabel>Rol</FieldLabel>
             <select name="role" className={fieldInputClass} defaultValue="member">
@@ -108,7 +117,7 @@ export function TeamPanel({
           </label>
           <div className="flex items-end">
             <Button type="submit" disabled={loading} className="w-full">
-              {loading ? "Enviando…" : "Enviar invitación"}
+              {loading ? "Creando…" : "Crear usuario"}
             </Button>
           </div>
         </form>
