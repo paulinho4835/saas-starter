@@ -5,6 +5,7 @@ import { requireNavAccess } from "@/lib/guard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ScrollHint } from "@/components/ui/ScrollHint";
 import { SALE_TYPE_LABEL, type SaleType } from "@/lib/saleType";
 
 type Customer = {
@@ -90,7 +91,9 @@ export default async function ClienteDetailPage({
             description="Este cliente todavía no tiene ventas asociadas."
           />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <ScrollHint />
+            <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -131,7 +134,8 @@ export default async function ClienteDetailPage({
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </Card>
     </div>

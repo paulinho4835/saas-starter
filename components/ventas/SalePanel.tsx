@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Pin, PinOff } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { ScrollHint } from "@/components/ui/ScrollHint";
 import { fieldInputClass } from "@/components/ui/Field";
 import { toast } from "@/lib/toast";
 import { calculateLineSubtotal, calculateSaleTotal } from "@/lib/sales";
@@ -277,6 +278,7 @@ export function SalePanel({
         )}
 
         <Card className="max-h-[75vh] overflow-auto">
+        <ScrollHint />
         <table className="w-full min-w-[820px] text-sm">
           <thead className="sticky top-0 z-10 bg-white">
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">

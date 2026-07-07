@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
 import { SimpleCatalogManager } from "@/components/ui/SimpleCatalogManager";
+import { ScrollHint } from "@/components/ui/ScrollHint";
 import { ProductFormModal } from "@/components/productos/ProductFormModal";
 import { DeleteProductButton } from "@/components/productos/DeleteProductButton";
 import { ImportProductsDialog } from "@/components/productos/ImportProductsDialog";
@@ -293,7 +294,9 @@ export default async function ProductosPage({
                 description="Crea el primer producto o importa un Excel."
               />
             ) : (
-              <table className="w-full min-w-[1200px] text-sm">
+              <>
+                <ScrollHint />
+                <table className="w-full min-w-[1200px] text-sm">
                 <thead className="border-b border-slate-200 text-left text-xs uppercase text-slate-400">
                   <tr>
                     <th className="px-3 py-2">Familia</th>
@@ -367,7 +370,8 @@ export default async function ProductosPage({
                     );
                   })}
                 </tbody>
-              </table>
+                </table>
+              </>
             )}
           </Card>
 

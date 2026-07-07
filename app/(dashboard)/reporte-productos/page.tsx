@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
 import { ExportExcelButton } from "@/components/ui/ExportExcelButton";
+import { ScrollHint } from "@/components/ui/ScrollHint";
 
 // Reporte de solo lectura: una fila por producto+sucursal, con totales al
 // pie sobre TODO lo que matchea el filtro (no solo la página visible).
@@ -149,7 +150,9 @@ export default async function ReporteProductosPage({
             description="Ajusta los filtros de búsqueda."
           />
         ) : (
-          <table className="w-full min-w-[1100px] text-sm">
+          <>
+            <ScrollHint />
+            <table className="w-full min-w-[1100px] text-sm">
             <thead className="border-b border-slate-200 text-left text-xs uppercase text-slate-400">
               <tr>
                 <th className="px-4 py-2">Código producto</th>
@@ -190,7 +193,8 @@ export default async function ReporteProductosPage({
                 ) : null,
               )}
             </tbody>
-          </table>
+            </table>
+          </>
         )}
       </Card>
 

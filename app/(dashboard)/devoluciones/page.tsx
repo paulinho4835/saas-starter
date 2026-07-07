@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
+import { ScrollHint } from "@/components/ui/ScrollHint";
 import { ReturnRowAction } from "@/components/devoluciones/ReturnRowAction";
 
 // Buscar ventas confirmadas y devolver (parcial o totalmente) sus líneas.
@@ -147,7 +148,9 @@ export default async function DevolucionesPage({
             description="Ajusta los filtros de búsqueda."
           />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <ScrollHint />
+            <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -205,7 +208,8 @@ export default async function DevolucionesPage({
                 })()}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </Card>
     </div>

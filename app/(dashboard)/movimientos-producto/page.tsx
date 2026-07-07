@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
 import { ExportExcelButton } from "@/components/ui/ExportExcelButton";
+import { ScrollHint } from "@/components/ui/ScrollHint";
 
 const PAGE_SIZE = 25;
 
@@ -202,7 +203,9 @@ export default async function MovimientosProductoPage({
             description="Ajusta los filtros de búsqueda."
           />
         ) : (
-          <table className="w-full min-w-[900px] text-sm">
+          <>
+            <ScrollHint />
+            <table className="w-full min-w-[900px] text-sm">
             <thead className="border-b border-slate-200 text-left text-xs uppercase text-slate-400">
               <tr>
                 <th className="px-4 py-2">Tipo movimiento</th>
@@ -233,7 +236,8 @@ export default async function MovimientosProductoPage({
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </>
         )}
       </Card>
 

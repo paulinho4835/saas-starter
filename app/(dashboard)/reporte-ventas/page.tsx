@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
+import { ScrollHint } from "@/components/ui/ScrollHint";
 
 // Reporte de solo lectura: una fila por producto vendido, con totales al pie.
 // Ver docs/superpowers/specs/2026-07-02-reporte-ventas-design.md
@@ -158,7 +159,9 @@ export default async function ReporteVentasPage({
             description="Ajusta los filtros de búsqueda."
           />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <ScrollHint />
+            <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -191,7 +194,8 @@ export default async function ReporteVentasPage({
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </Card>
 
