@@ -36,7 +36,7 @@ export default function RestablecerPage() {
     setDone(true);
     setLoading(false);
     setTimeout(() => {
-      window.location.href = "/dashboard";
+      window.location.href = "/ventas";
     }, 1500);
   }
 

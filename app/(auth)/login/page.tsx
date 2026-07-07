@@ -25,7 +25,7 @@ export default function LoginPage() {
       return;
     }
     // Recarga dura para que el middleware recoja la nueva sesión.
-    window.location.href = "/dashboard";
+    window.location.href = "/ventas";
   }
 
   return (

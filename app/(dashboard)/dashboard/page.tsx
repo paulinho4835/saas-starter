@@ -104,12 +104,12 @@ export default async function DashboardHome({
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Clientes" value={clientes ?? 0} icon={<Users className="h-5 w-5" />} />
         <Stat
-          label={`Ventas · ${PERIOD_LABEL[period]} · ${PAYMENT_FILTER_LABEL[payment]}`}
+          label={`Ventas · ${PERIOD_LABEL[period] ?? PERIOD_LABEL["30d"]} · ${PAYMENT_FILTER_LABEL[payment] ?? PAYMENT_FILTER_LABEL.total}`}
           value={formatBs(salesTotal)}
           icon={<Receipt className="h-5 w-5" />}
         />
         <Stat
-          label={`Cantidad · ${PERIOD_LABEL[period]} · ${PAYMENT_FILTER_LABEL[payment]}`}
+          label={`Cantidad · ${PERIOD_LABEL[period] ?? PERIOD_LABEL["30d"]} · ${PAYMENT_FILTER_LABEL[payment] ?? PAYMENT_FILTER_LABEL.total}`}
           value={sales.length}
           icon={<ShoppingCart className="h-5 w-5" />}
         />

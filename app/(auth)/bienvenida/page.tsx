@@ -39,7 +39,7 @@ export default function BienvenidaPage() {
       setLoading(false);
       return;
     }
-    window.location.href = "/dashboard";
+    window.location.href = "/ventas";
   }
 
   if (hasSession === false) {

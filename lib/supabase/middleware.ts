@@ -67,7 +67,7 @@ export async function updateSession(request: NextRequest) {
   // Si ya tiene sesión y va a /login, redirigir al panel.
   if (user && AUTH_PAGES.some((p) => pathname.startsWith(p))) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/ventas";
     return NextResponse.redirect(url);
   }
 
