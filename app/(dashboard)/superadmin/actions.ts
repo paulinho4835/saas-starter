@@ -7,7 +7,6 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isPlatformAdmin } from "@/lib/superadmin";
-import { inviteOrgUser } from "@/lib/inviteUser";
 import {
   IMPERSONATION_ORG_NAME_COOKIE,
   IMPERSONATION_RETURN_TOKEN_COOKIE,
@@ -20,10 +19,13 @@ const createOrgSchema = z.object({
   orgName: z.string().trim().min(1, "El nombre es obligatorio.").max(120),
   adminEmail: z.string().trim().email("Correo inválido."),
   adminName: z.string().trim().min(1, "El nombre del admin es obligatorio.").max(120),
+  adminPassword: z.string().min(6, "La contraseña debe tener al menos 6 caracteres."),
 });
 
-// Crea una organización nueva e invita a su primer administrador. Si la
-// invitación falla, revierte la organización (no dejar huérfanas).
+// Crea una organización nueva y su primer administrador con la contraseña que
+// define el superadmin (sin invitación por correo: el superadmin le entrega la
+// contraseña al dueño de la organización). Si la creación del usuario/perfil
+// falla, revierte la organización para no dejarla huérfana.
 export async function createOrg(formData: FormData): Promise<ActionResult> {
   if (!(await isPlatformAdmin())) {
     return { ok: false, error: "No autorizado." };
@@ -33,6 +35,7 @@ export async function createOrg(formData: FormData): Promise<ActionResult> {
     orgName: formData.get("orgName"),
     adminEmail: formData.get("adminEmail"),
     adminName: formData.get("adminName"),
+    adminPassword: formData.get("adminPassword"),
   });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
@@ -49,15 +52,27 @@ export async function createOrg(formData: FormData): Promise<ActionResult> {
     return { ok: false, error: "No se pudo crear la organización." };
   }
 
-  const res = await inviteOrgUser(admin, {
+  const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email: parsed.data.adminEmail,
-    fullName: parsed.data.adminName,
-    orgId: org.id,
-    role: "admin",
+    password: parsed.data.adminPassword,
+    email_confirm: true,
+    user_metadata: { full_name: parsed.data.adminName },
   });
-  if (!res.ok) {
+  if (createErr || !created.user) {
     await admin.from("organizations").delete().eq("id", org.id); // rollback
-    return { ok: false, error: res.error };
+    return { ok: false, error: createErr?.message ?? "No se pudo crear el administrador." };
+  }
+
+  const { error: profErr } = await admin.from("profiles").insert({
+    id: created.user.id,
+    org_id: org.id,
+    role: "admin",
+    full_name: parsed.data.adminName,
+  });
+  if (profErr) {
+    await admin.auth.admin.deleteUser(created.user.id); // rollback usuario
+    await admin.from("organizations").delete().eq("id", org.id); // rollback org
+    return { ok: false, error: `No se pudo crear el perfil: ${profErr.message}` };
   }
 
   revalidatePath("/superadmin");

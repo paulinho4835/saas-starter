@@ -22,7 +22,7 @@ export function NewOrgForm() {
       toast(res.error ?? "No se pudo crear.", "error");
       return;
     }
-    toast("Organización creada. Se envió la invitación al admin.");
+    toast("Organización creada. Entrégale el correo y la contraseña al admin.");
     setOpen(false);
     router.refresh();
   }
@@ -34,18 +34,25 @@ export function NewOrgForm() {
         open={open}
         onClose={() => setOpen(false)}
         title="Nueva organización"
-        subtitle="Se invitará por correo a su primer administrador."
+        subtitle="Defines la contraseña de su primer administrador y se la entregas tú mismo."
       >
         <form onSubmit={onSubmit} className="space-y-4">
           <Field label="Nombre de la organización" name="orgName" required />
           <Field label="Nombre del administrador" name="adminName" required />
           <Field label="Correo del administrador" name="adminEmail" type="email" required />
+          <Field
+            label="Contraseña del administrador"
+            name="adminPassword"
+            type="text"
+            required
+            minLength={6}
+          />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Creando…" : "Crear e invitar"}
+              {loading ? "Creando…" : "Crear organización"}
             </Button>
           </div>
         </form>
