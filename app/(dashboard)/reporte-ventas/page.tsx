@@ -208,7 +208,7 @@ export default async function ReporteVentasPage({
             <span className="font-semibold text-slate-800">{totalEfectivoBs.toFixed(2)}</span>
           </p>
           <p>
-            <span className="text-slate-500">Total QR Bs:</span>{" "}
+            <span className="text-slate-500">Ventas QR Bs (con y sin factura):</span>{" "}
             <span className="font-semibold text-slate-800">{totalQrBs.toFixed(2)}</span>
           </p>
         </Card>
