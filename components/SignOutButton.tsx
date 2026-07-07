@@ -1,10 +1,12 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { clearImpersonationCookies } from "@/lib/impersonation-actions";
 
 export function SignOutButton() {
   async function signOut() {
     await createClient().auth.signOut();
+    await clearImpersonationCookies();
     window.location.href = "/login";
   }
   return (
