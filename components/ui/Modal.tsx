@@ -34,12 +34,19 @@ export function Modal({
   className?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // onClose suele ser un arrow function inline que el padre recrea en cada
+  // render (ej. cada tecla escrita en un input controlado). Si lo ponemos en
+  // las deps del effect, este se re-ejecuta en cada tecla y panelRef.focus()
+  // le roba el foco al input. Con la ref evitamos que ese re-render dispare
+  // el effect de nuevo.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   // Escape para cerrar + bloqueo de scroll del body.
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     }
     document.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
@@ -50,7 +57,7 @@ export function Modal({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open || typeof document === "undefined") return null;
 
