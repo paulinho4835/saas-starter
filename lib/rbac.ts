@@ -19,6 +19,7 @@ const NAV_WHITELIST: Record<Role, FeatureKey[]> = {
     "reporte_productos",
     "reporte_ventas",
     "movimientos_producto",
+    "ajustes",
   ],
   manager: [
     "productos",
