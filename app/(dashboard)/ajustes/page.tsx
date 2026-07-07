@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { SimpleCatalogManager } from "@/components/ui/SimpleCatalogManager";
 import { ButtonLink } from "@/components/ui/Button";
+import { ExchangeRateForm } from "@/components/ajustes/ExchangeRateForm";
 import { createBranch, deleteBranch } from "@/app/(dashboard)/ajustes/actions";
 
 // Ajustes de la organización: sucursales (solo admin). La gestión de equipo
@@ -17,15 +18,28 @@ export default async function AjustesPage() {
   if (profile.role !== "admin") redirect("/dashboard");
 
   const supabase = await createClient();
-  const { data: branchesData } = await supabase
-    .from("branches")
-    .select("id, name")
-    .order("name");
+  const [{ data: branchesData }, { data: orgData }] = await Promise.all([
+    supabase.from("branches").select("id, name").order("name"),
+    supabase.from("organizations").select("exchange_rate").eq("id", profile.orgId).single(),
+  ]);
   const branches = (branchesData ?? []) as { id: string; name: string }[];
+  const exchangeRate = orgData?.exchange_rate ?? 0;
 
   return (
     <div className="space-y-6">
       <PageHeader title="Ajustes" subtitle="Configuración de la organización" />
+
+      <Card className="p-4">
+        <h2 className="font-semibold text-slate-800">Tipo de cambio</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Es único para toda la organización. Al guardarlo, se recalcula automáticamente el
+          precio (SF, CF y MAY) de todos los productos.
+        </p>
+        <div className="mt-3">
+          <ExchangeRateForm exchangeRate={exchangeRate} />
+        </div>
+      </Card>
+
       <div>
         <h2 className="mb-3 font-semibold text-slate-800">Sucursales</h2>
         <SimpleCatalogManager

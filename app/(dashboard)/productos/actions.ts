@@ -15,6 +15,21 @@ import {
 
 export type ActionResult = { ok: boolean; error?: string };
 
+// Tipo de cambio global de la organización (Ajustes → Tipo de cambio). Ya no
+// se ingresa por producto: se lee aquí y se congela en products.exchange_rate
+// al guardar, igual que hace set_org_exchange_rate() cuando cambia el global.
+async function getOrgExchangeRate(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+): Promise<number> {
+  const { data } = await supabase
+    .from("organizations")
+    .select("exchange_rate")
+    .eq("id", orgId)
+    .single();
+  return data?.exchange_rate ?? 0;
+}
+
 // ── Catálogos (marcas, familias, procedencias) ──────────────────────────────
 async function requireCatalogWrite(): Promise<
   { ok: true; orgId: string } | { ok: false; error: string }
@@ -107,7 +122,6 @@ const productSchema = z.object({
   stop_mm: z.coerce.number().optional(),
   application: z.string().trim().max(500).optional().or(z.literal("")),
   cost_usd: z.coerce.number().min(0, "El costo no puede ser negativo."),
-  exchange_rate: z.coerce.number().positive("El tipo de cambio debe ser mayor a 0."),
   margin_sf_pct: z.coerce.number(),
   margin_cf_pct: z.coerce.number(),
   margin_may_pct: z.coerce.number(),
@@ -127,7 +141,6 @@ function parseProductForm(formData: FormData) {
     stop_mm: formData.get("stop_mm") || undefined,
     application: formData.get("application"),
     cost_usd: formData.get("cost_usd"),
-    exchange_rate: formData.get("exchange_rate"),
     margin_sf_pct: formData.get("margin_sf_pct"),
     margin_cf_pct: formData.get("margin_cf_pct"),
     margin_may_pct: formData.get("margin_may_pct"),
@@ -159,10 +172,11 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
   if (!branchValid) {
     return { ok: false, error: "La sucursal seleccionada no es válida." };
   }
+  const exchangeRate = await getOrgExchangeRate(supabase, profile.orgId);
 
   const prices = calculatePrices({
     costUsd: parsed.data.cost_usd,
-    exchangeRate: parsed.data.exchange_rate,
+    exchangeRate,
     marginSfPct: parsed.data.margin_sf_pct,
     marginCfPct: parsed.data.margin_cf_pct,
     marginMayPct: parsed.data.margin_may_pct,
@@ -184,7 +198,7 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
       stop_mm: parsed.data.stop_mm ?? null,
       application: parsed.data.application || null,
       cost_usd: parsed.data.cost_usd,
-      exchange_rate: parsed.data.exchange_rate,
+      exchange_rate: exchangeRate,
       margin_sf_pct: parsed.data.margin_sf_pct,
       margin_cf_pct: parsed.data.margin_cf_pct,
       margin_may_pct: parsed.data.margin_may_pct,
@@ -279,15 +293,17 @@ export async function updateProduct(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
 
+  const supabase = await createClient();
+  const exchangeRate = await getOrgExchangeRate(supabase, profile.orgId);
+
   const prices = calculatePrices({
     costUsd: parsed.data.cost_usd,
-    exchangeRate: parsed.data.exchange_rate,
+    exchangeRate,
     marginSfPct: parsed.data.margin_sf_pct,
     marginCfPct: parsed.data.margin_cf_pct,
     marginMayPct: parsed.data.margin_may_pct,
   });
 
-  const supabase = await createClient();
   const { error } = await supabase
     .from("products")
     .update({
@@ -303,7 +319,7 @@ export async function updateProduct(
       stop_mm: parsed.data.stop_mm ?? null,
       application: parsed.data.application || null,
       cost_usd: parsed.data.cost_usd,
-      exchange_rate: parsed.data.exchange_rate,
+      exchange_rate: exchangeRate,
       margin_sf_pct: parsed.data.margin_sf_pct,
       margin_cf_pct: parsed.data.margin_cf_pct,
       margin_may_pct: parsed.data.margin_may_pct,

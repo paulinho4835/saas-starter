@@ -29,7 +29,6 @@ type ProductDetail = {
   stop_mm: number | null;
   application: string | null;
   cost_usd: number | null;
-  exchange_rate: number | null;
   margin_sf_pct: number | null;
   margin_cf_pct: number | null;
   margin_may_pct: number | null;
@@ -46,6 +45,7 @@ export function ProductFormModal({
   origins,
   suppliers,
   branches,
+  exchangeRate,
 }: {
   mode: "create" | "edit";
   product?: ProductDetail;
@@ -55,38 +55,29 @@ export function ProductFormModal({
   origins: CatalogOption[];
   suppliers: CatalogOption[];
   branches: CatalogOption[];
+  exchangeRate: number;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const [costUsd, setCostUsd] = useState(product?.cost_usd?.toString() ?? "");
-  const [exchangeRate, setExchangeRate] = useState(
-    product?.exchange_rate?.toString() ?? "",
-  );
   const [marginSf, setMarginSf] = useState(product?.margin_sf_pct?.toString() ?? "");
   const [marginCf, setMarginCf] = useState(product?.margin_cf_pct?.toString() ?? "");
   const [marginMay, setMarginMay] = useState(product?.margin_may_pct?.toString() ?? "");
 
   const preview = useMemo(() => {
-    if (
-      costUsd === "" ||
-      exchangeRate === "" ||
-      marginSf === "" ||
-      marginCf === "" ||
-      marginMay === ""
-    ) {
+    if (costUsd === "" || marginSf === "" || marginCf === "" || marginMay === "") {
       return null;
     }
     const cost = Number(costUsd);
-    const rate = Number(exchangeRate);
     const sf = Number(marginSf);
     const cf = Number(marginCf);
     const may = Number(marginMay);
-    if (![cost, rate, sf, cf, may].every((n) => Number.isFinite(n))) return null;
+    if (![cost, sf, cf, may].every((n) => Number.isFinite(n))) return null;
     return calculatePrices({
       costUsd: cost,
-      exchangeRate: rate,
+      exchangeRate,
       marginSfPct: sf,
       marginCfPct: cf,
       marginMayPct: may,
@@ -228,15 +219,16 @@ export function ProductFormModal({
               value={costUsd}
               onChange={(e) => setCostUsd(e.target.value)}
             />
-            <Field
-              label="T. Cambio"
-              name="exchange_rate"
-              type="number"
-              step="0.01"
-              required
-              value={exchangeRate}
-              onChange={(e) => setExchangeRate(e.target.value)}
-            />
+            <label className="block text-sm">
+              <FieldLabel>T. Cambio</FieldLabel>
+              <input
+                type="text"
+                disabled
+                value={exchangeRate}
+                className={fieldInputClass}
+                title="Se edita en Ajustes → Tipo de cambio y afecta a todos los productos."
+              />
+            </label>
             <Field
               label="SF %"
               name="margin_sf_pct"
@@ -265,6 +257,10 @@ export function ProductFormModal({
               onChange={(e) => setMarginMay(e.target.value)}
             />
           </div>
+
+          <p className="text-xs text-slate-400">
+            El tipo de cambio es global y se edita en Ajustes → Tipo de cambio.
+          </p>
 
           {preview && (
             <p className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">

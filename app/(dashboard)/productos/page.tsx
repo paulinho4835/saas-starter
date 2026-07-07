@@ -46,7 +46,6 @@ type ProductRow = {
   stop_mm: number | null;
   application: string | null;
   cost_usd: number | null;
-  exchange_rate: number | null;
   margin_sf_pct: number | null;
   margin_cf_pct: number | null;
   margin_may_pct: number | null;
@@ -59,11 +58,19 @@ type ProductRow = {
 };
 
 const PRODUCT_SELECT =
-  "id, code, brand_id, family_id, origin_id, supplier_id, internal_mm, external_mm, height_mm, flange_mm, stop_mm, application, cost_usd, exchange_rate, margin_sf_pct, margin_cf_pct, margin_may_pct, price_sf_bs, price_cf_bs, price_may_bs, product_brands(name), product_families(name), product_origins(name)";
+  "id, code, brand_id, family_id, origin_id, supplier_id, internal_mm, external_mm, height_mm, flange_mm, stop_mm, application, cost_usd, margin_sf_pct, margin_cf_pct, margin_may_pct, price_sf_bs, price_cf_bs, price_may_bs, product_brands(name), product_families(name), product_origins(name)";
 
 function fmt(value: number | null): string {
   if (value === null) return "—";
   return String(Number(value.toFixed(2)));
+}
+
+// Productos cargados por Excel no tienen margen (%) — traen el precio en Bs
+// directo. Sin este fallback la columna mostraba "—" aunque el producto sí
+// tiene precio de venta (el usado en Ventas es price_*_bs, no el margen).
+function fmtPercentOrPrice(marginPct: number | null, priceBs: number): string {
+  if (marginPct !== null) return `${fmt(marginPct)}%`;
+  return priceBs > 0 ? `${fmt(priceBs)} Bs` : "—";
 }
 
 export default async function ProductosPage({
@@ -86,19 +93,27 @@ export default async function ProductosPage({
   const profile = await getProfile();
   const supabase = await createClient();
 
-  const [{ data: brandsData }, { data: familiesData }, { data: originsData }, { data: branchesData }, { data: suppliersData }] =
-    await Promise.all([
-      supabase.from("product_brands").select("id, name").order("name"),
-      supabase.from("product_families").select("id, name").order("name"),
-      supabase.from("product_origins").select("id, name").order("name"),
-      supabase.from("branches").select("id, name").eq("is_warehouse", false).order("name"),
-      supabase.from("suppliers").select("id, name").order("name"),
-    ]);
+  const [
+    { data: brandsData },
+    { data: familiesData },
+    { data: originsData },
+    { data: branchesData },
+    { data: suppliersData },
+    { data: orgData },
+  ] = await Promise.all([
+    supabase.from("product_brands").select("id, name").order("name"),
+    supabase.from("product_families").select("id, name").order("name"),
+    supabase.from("product_origins").select("id, name").order("name"),
+    supabase.from("branches").select("id, name").eq("is_warehouse", false).order("name"),
+    supabase.from("suppliers").select("id, name").order("name"),
+    supabase.from("organizations").select("exchange_rate").eq("id", profile?.orgId ?? "").single(),
+  ]);
   const brands = brandsData ?? [];
   const families = familiesData ?? [];
   const origins = originsData ?? [];
   const branches = branchesData ?? [];
   const suppliers = suppliersData ?? [];
+  const exchangeRate = orgData?.exchange_rate ?? 0;
 
   const canWriteProductos = can(profile?.role, "productos:write");
   const canDeleteProductos = can(profile?.role, "productos:delete");
@@ -184,6 +199,7 @@ export default async function ProductosPage({
                   origins={origins}
                   suppliers={suppliers}
                   branches={branches}
+                  exchangeRate={exchangeRate}
                 />
               )}
             </div>
@@ -313,13 +329,13 @@ export default async function ProductosPage({
                         <td className="px-3 py-2 font-semibold text-red-600">{totalStock}</td>
                         <td className="px-3 py-2 text-slate-500">{fmt(p.cost_usd)}</td>
                         <td className="bg-emerald-50 px-3 py-2 text-center text-emerald-900">
-                          {fmt(p.margin_cf_pct)}
+                          {fmtPercentOrPrice(p.margin_cf_pct, p.price_cf_bs)}
                         </td>
                         <td className="bg-amber-50 px-3 py-2 text-center text-amber-900">
-                          {fmt(p.margin_sf_pct)}
+                          {fmtPercentOrPrice(p.margin_sf_pct, p.price_sf_bs)}
                         </td>
                         <td className="bg-rose-50 px-3 py-2 text-center text-rose-900">
-                          {fmt(p.margin_may_pct)}
+                          {fmtPercentOrPrice(p.margin_may_pct, p.price_may_bs)}
                         </td>
                         <td className="px-3 py-2 text-slate-500">{fmt(p.internal_mm)}</td>
                         <td className="px-3 py-2 text-slate-500">{fmt(p.external_mm)}</td>
@@ -342,6 +358,7 @@ export default async function ProductosPage({
                                 origins={origins}
                                 suppliers={suppliers}
                                 branches={branches}
+                                exchangeRate={exchangeRate}
                               />
                             )}
                             {canDeleteProductos && <DeleteProductButton id={p.id} code={p.code} />}
