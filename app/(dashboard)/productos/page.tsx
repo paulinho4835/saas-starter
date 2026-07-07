@@ -65,11 +65,10 @@ function fmt(value: number | null): string {
   return String(Number(value.toFixed(2)));
 }
 
-// Productos cargados por Excel no tienen margen (%) — traen el precio en Bs
-// directo. Sin este fallback la columna mostraba "—" aunque el producto sí
-// tiene precio de venta (el usado en Ventas es price_*_bs, no el margen).
-function fmtPercentOrPrice(marginPct: number | null, priceBs: number): string {
-  if (marginPct !== null) return `${fmt(marginPct)}%`;
+// Las columnas CF/SF/MAY muestran siempre el precio de venta final en Bs
+// (price_*_bs) — el mismo que usa Ventas — sin importar si el producto tiene
+// margen % configurado (alta manual) o vino de una carga por Excel.
+function fmtPrice(priceBs: number): string {
   return priceBs > 0 ? `${fmt(priceBs)} Bs` : "—";
 }
 
@@ -302,9 +301,9 @@ export default async function ProductosPage({
                     <th className="px-3 py-2">Marca</th>
                     <th className="px-3 py-2">Stock</th>
                     <th className="px-3 py-2">Costo $</th>
-                    <th className="bg-emerald-100 px-3 py-2 text-center text-emerald-800">CF %</th>
-                    <th className="bg-amber-100 px-3 py-2 text-center text-amber-800">SF %</th>
-                    <th className="bg-rose-100 px-3 py-2 text-center text-rose-800">MAY %</th>
+                    <th className="bg-emerald-100 px-3 py-2 text-center text-emerald-800">CF Bs</th>
+                    <th className="bg-amber-100 px-3 py-2 text-center text-amber-800">SF Bs</th>
+                    <th className="bg-rose-100 px-3 py-2 text-center text-rose-800">MAY Bs</th>
                     <th className="px-3 py-2">MI</th>
                     <th className="px-3 py-2">ME</th>
                     <th className="px-3 py-2">ALT</th>
@@ -329,13 +328,13 @@ export default async function ProductosPage({
                         <td className="px-3 py-2 font-semibold text-red-600">{totalStock}</td>
                         <td className="px-3 py-2 text-slate-500">{fmt(p.cost_usd)}</td>
                         <td className="bg-emerald-50 px-3 py-2 text-center text-emerald-900">
-                          {fmtPercentOrPrice(p.margin_cf_pct, p.price_cf_bs)}
+                          {fmtPrice(p.price_cf_bs)}
                         </td>
                         <td className="bg-amber-50 px-3 py-2 text-center text-amber-900">
-                          {fmtPercentOrPrice(p.margin_sf_pct, p.price_sf_bs)}
+                          {fmtPrice(p.price_sf_bs)}
                         </td>
                         <td className="bg-rose-50 px-3 py-2 text-center text-rose-900">
-                          {fmtPercentOrPrice(p.margin_may_pct, p.price_may_bs)}
+                          {fmtPrice(p.price_may_bs)}
                         </td>
                         <td className="px-3 py-2 text-slate-500">{fmt(p.internal_mm)}</td>
                         <td className="px-3 py-2 text-slate-500">{fmt(p.external_mm)}</td>
