@@ -38,7 +38,7 @@ export function priceTierForSaleType(type: SaleType): "sf" | "cf" | "may" {
   return PRICE_TIER_BY_SALE_TYPE[type];
 }
 
-const QR_TYPES: SaleType[] = ["sin_factura_qr", "con_factura_qr"];
+export const QR_TYPES: SaleType[] = ["sin_factura_qr", "con_factura_qr"];
 
 export function paymentMethodForSaleType(type: SaleType): "efectivo" | "qr" {
   return QR_TYPES.includes(type) ? "qr" : "efectivo";

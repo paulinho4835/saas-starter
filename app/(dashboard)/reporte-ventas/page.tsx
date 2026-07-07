@@ -2,7 +2,7 @@ import { FileBarChart } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireNavAccess } from "@/lib/guard";
 import { escapePostgrestFilterValue } from "@/lib/postgrest";
-import { SALE_TYPES, SALE_TYPE_LABEL, paymentMethodForSaleType, type SaleType } from "@/lib/saleType";
+import { SALE_TYPES, SALE_TYPE_LABEL, QR_TYPES, paymentMethodForSaleType, type SaleType } from "@/lib/saleType";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -84,7 +84,8 @@ export default async function ReporteVentasPage({
     .limit(RESULT_LIMIT);
 
   if (sp.branchId) query = query.eq("sales.branch_id", sp.branchId);
-  if (sp.saleType) query = query.eq("sales.sale_type", sp.saleType);
+  if (sp.saleType === "qr") query = query.in("sales.sale_type", QR_TYPES);
+  else if (sp.saleType) query = query.eq("sales.sale_type", sp.saleType);
   if (matchingCustomerIds) query = query.in("sales.customer_id", matchingCustomerIds);
 
   const { data } = matchingCustomerIds?.length === 0 ? { data: [] } : await query;
@@ -142,6 +143,7 @@ export default async function ReporteVentasPage({
                   {SALE_TYPE_LABEL[t]}
                 </option>
               ))}
+              <option value="qr">QR (con y sin factura)</option>
             </select>
           </label>
           <Button type="submit">Generar</Button>
