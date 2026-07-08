@@ -72,19 +72,21 @@ export function Sidebar({
     };
   }, [open]);
 
+  // Degradado rojo del sidebar legacy: fijo, no se invierte con el tema
+  // claro/oscuro (como "night" en tailwind.config), igual que en el original.
   const content = (
-    <div className="flex h-full flex-col p-4">
+    <div className="flex h-full flex-col bg-gradient-to-b from-sidebar-from to-sidebar-to p-4">
       <div className="mb-6 flex items-center gap-3">
         {initials && (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-bold text-white">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-sm font-bold text-sidebar-to">
             {initials}
           </div>
         )}
         <div className="min-w-0">
-          <div className="truncate text-lg font-bold text-brand-fg">
+          <div className="truncate text-lg font-bold text-white">
             {orgName}
           </div>
-          <div className="truncate text-xs text-slate-500">{subtitle}</div>
+          <div className="truncate text-xs text-white/70">{subtitle}</div>
         </div>
       </div>
 
@@ -102,14 +104,14 @@ export function Sidebar({
       </nav>
 
       {superadmin && (
-        <div className="mt-6 border-t border-slate-200 pt-4">
+        <div className="mt-6 border-t border-white/20 pt-4">
           <ButtonLink href="/superadmin" variant="dark" className="w-full">
             <Shield className="h-4 w-4" /> Superadmin
           </ButtonLink>
         </div>
       )}
 
-      <div className="mt-auto space-y-1 border-t border-slate-200 pt-4">
+      <div className="mt-auto space-y-1 border-t border-white/20 pt-4 [&_button]:!text-white [&_button]:hover:!bg-white/10">
         <ThemeToggle />
         <SignOutButton />
       </div>
@@ -119,7 +121,7 @@ export function Sidebar({
   return (
     <>
       {/* Barra superior solo en móvil */}
-      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 md:hidden">
+      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white/95 px-4 py-3 md:hidden">
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -132,7 +134,7 @@ export function Sidebar({
       </header>
 
       {/* Sidebar fijo en escritorio */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 border-r border-slate-200 bg-white md:block">
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 md:block">
         {content}
       </aside>
 
@@ -143,12 +145,12 @@ export function Sidebar({
             className="absolute inset-0 bg-black/40"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute left-0 top-0 h-full w-64 bg-white shadow-xl">
+          <div className="absolute left-0 top-0 h-full w-64 shadow-xl">
             <button
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Cerrar menú"
-              className="absolute right-2 top-2 rounded-md p-1.5 text-slate-400 hover:bg-slate-100"
+              className="absolute right-2 top-2 rounded-md p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
             >
               <X className="h-5 w-5" />
             </button>

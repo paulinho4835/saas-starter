@@ -5,13 +5,14 @@ import { requireNavAccess } from "@/lib/guard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { escapePostgrestFilterValue } from "@/lib/postgrest";
-import { toleranceRange } from "@/lib/measurementSearch";
+import { toleranceRange, closestMatch, type MeasurementRow } from "@/lib/measurementSearch";
 import { clampPage } from "@/lib/ventasCart";
 import { can } from "@/lib/rbac";
 import { SalePanel } from "@/components/ventas/SalePanel";
 import { VentasFilters } from "./VentasFilters";
 
-const PAGE_SIZE = 25;
+// El legacy (Venta Retenes) pagina 75 productos por página.
+const PAGE_SIZE = 75;
 
 type SearchParams = {
   code?: string;
@@ -29,7 +30,6 @@ type ProductResultRow = {
   id: string;
   code: string;
   application: string | null;
-  notes: string | null;
   price_sf_bs: number;
   price_cf_bs: number;
   price_may_bs: number;
@@ -43,7 +43,7 @@ type ProductResultRow = {
 };
 
 const RESULT_SELECT =
-  "id, code, application, notes, price_sf_bs, price_cf_bs, price_may_bs, internal_mm, external_mm, height_mm, flange_mm, stop_mm, product_brands(name), product_stock!inner(quantity)";
+  "id, code, application, price_sf_bs, price_cf_bs, price_may_bs, internal_mm, external_mm, height_mm, flange_mm, stop_mm, product_brands(name), product_stock!inner(quantity)";
 
 export default async function VentasPage({
   searchParams,
@@ -77,22 +77,23 @@ export default async function VentasPage({
   const brands = brandsData ?? [];
   const exchangeRate = orgData?.exchange_rate ?? 0;
 
-  // Si hay algún filtro de medida activo, se prioriza la cercanía al valor
-  // buscado y se muestran TODOS los resultados dentro del rango de
-  // tolerancia sin paginar (paginar rompería el orden por cercanía). Sin
-  // filtro de medida, se pagina de a PAGE_SIZE como el resto de los
-  // módulos.
+  // El legacy ordena SIEMPRE por medida_externa, medida_interna, altura,
+  // pestaña, tope (todas ASC) — con o sin filtro de medida activo — y pagina
+  // 75 por página. Cuando hay un filtro de medida, además calcula a qué
+  // página saltar automáticamente (la que contiene la coincidencia exacta o
+  // la más cercana), sin reordenar los resultados por cercanía.
   const hasMeasurementFilter = Boolean(sp.mi || sp.me || sp.alt || sp.pest || sp.tope);
-  const requestedPage = Math.max(1, Number(sp.page) || 1);
+  const explicitPage = sp.page ? Math.max(1, Number(sp.page) || 1) : null;
 
   let query = supabase
     .from("products")
     .select(RESULT_SELECT, { count: hasMeasurementFilter ? undefined : "exact" })
     .eq("product_stock.branch_id", branchId)
-    .order("internal_mm", { nullsFirst: false })
     .order("external_mm", { nullsFirst: false })
+    .order("internal_mm", { nullsFirst: false })
     .order("height_mm", { nullsFirst: false })
     .order("flange_mm", { nullsFirst: false })
+    .order("stop_mm", { nullsFirst: false })
     .order("code");
 
   if (sp.code) query = query.ilike("code", `%${escapePostgrestFilterValue(sp.code)}%`);
@@ -120,45 +121,62 @@ export default async function VentasPage({
     query = query.gte("stop_mm", lo).lte("stop_mm", hi);
   }
 
-  query = hasMeasurementFilter
-    ? query.limit(1000)
-    : query.range(0, PAGE_SIZE * 200 - 1); // acotado; el recorte real de página ocurre abajo tras contar
-
-  const { data, count } = await query;
-  let rows = (data ?? []) as unknown as ProductResultRow[];
-
-  let page = 1;
-  let totalPages = 1;
+  let rows: ProductResultRow[];
+  let page: number;
+  let totalPages: number;
+  // Productos que se resaltan (color -intenso) tras una búsqueda por medida:
+  // TODOS los que comparten exactamente las medidas activas de la coincidencia
+  // más cercana, no solo esa fila — el legacy aplica `-intenso` por fila
+  // comparando contra $medidas_cercanas, así que dos productos con el mismo
+  // MI/ME (p.ej.) quedan ambos resaltados. El auto-scroll apunta a la primera
+  // fila resaltada de la página (nro_registro_cercano). Solo se calcula en una
+  // búsqueda nueva (sin `?page=` explícito), no al paginar a mano.
+  let highlightProductIds: string[] = [];
 
   if (hasMeasurementFilter) {
-    const targetMi = sp.mi ? Number(sp.mi) : null;
-    const targetMe = sp.me ? Number(sp.me) : null;
-    const targetAlt = sp.alt ? Number(sp.alt) : null;
-    const targetPest = sp.pest ? Number(sp.pest) : null;
-    const targetTope = sp.tope ? Number(sp.tope) : null;
+    // Con filtro de medida se trae todo el conjunto ya ordenado (acotado a un
+    // límite generoso) para poder calcular la página de cercanía exactamente
+    // igual que el legacy, y luego se recorta la página a mostrar en JS.
+    const { data } = await query.limit(5000);
+    const allRows = (data ?? []) as unknown as ProductResultRow[];
+    totalPages = Math.max(1, Math.ceil(allRows.length / PAGE_SIZE));
 
-    function distance(row: ProductResultRow): number {
-      let total = 0;
-      if (targetMi !== null) total += Math.abs((row.internal_mm ?? targetMi) - targetMi);
-      if (targetMe !== null) total += Math.abs((row.external_mm ?? targetMe) - targetMe);
-      if (targetAlt !== null) total += Math.abs((row.height_mm ?? targetAlt) - targetAlt);
-      if (targetPest !== null) total += Math.abs((row.flange_mm ?? targetPest) - targetPest);
-      if (targetTope !== null) total += Math.abs((row.stop_mm ?? targetTope) - targetTope);
-      return total;
+    if (explicitPage) {
+      page = clampPage(explicitPage, totalPages);
+    } else {
+      const measurementRows: MeasurementRow[] = allRows.map((r) => ({
+        internalMm: r.internal_mm,
+        externalMm: r.external_mm,
+        heightMm: r.height_mm,
+        flangeMm: r.flange_mm,
+        stopMm: r.stop_mm,
+      }));
+      const targets = {
+        externalMm: sp.me ? Number(sp.me) : undefined,
+        internalMm: sp.mi ? Number(sp.mi) : undefined,
+        heightMm: sp.alt ? Number(sp.alt) : undefined,
+        flangeMm: sp.pest ? Number(sp.pest) : undefined,
+        stopMm: sp.tope ? Number(sp.tope) : undefined,
+      };
+      const match = closestMatch(measurementRows, targets, PAGE_SIZE);
+      page = clampPage(match.page, totalPages);
+      highlightProductIds = match.matchingIndices
+        .map((i) => allRows[i]?.id)
+        .filter((id): id is string => Boolean(id));
     }
-
-    rows = [...rows].sort((a, b) => distance(a) - distance(b));
+    rows = allRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   } else {
-    totalPages = Math.max(1, Math.ceil((count ?? rows.length) / PAGE_SIZE));
-    page = clampPage(requestedPage, totalPages);
-    rows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    const { data, count } = await query.range(0, PAGE_SIZE * 200 - 1);
+    const allRows = (data ?? []) as unknown as ProductResultRow[];
+    totalPages = Math.max(1, Math.ceil((count ?? allRows.length) / PAGE_SIZE));
+    page = clampPage(explicitPage ?? 1, totalPages);
+    rows = allRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   }
 
   const products = rows.map((r) => ({
     id: r.id,
     code: r.code,
     application: r.application,
-    notes: r.notes,
     brandName: r.product_brands?.name ?? "—",
     priceSfBs: r.price_sf_bs,
     priceCfBs: r.price_cf_bs,
@@ -217,6 +235,7 @@ export default async function VentasPage({
           page={page}
           totalPages={totalPages}
           baseQuery={baseQuery}
+          highlightProductIds={highlightProductIds}
           exchangeRate={exchangeRate}
           canEditExchangeRate={can(profile.role, "settings:write")}
         />

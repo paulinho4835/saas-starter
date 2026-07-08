@@ -46,20 +46,27 @@ export default {
           DEFAULT: "#0f172a",
           soft: "#1e293b",
         },
-        // Color de marca. Cambia estos valores para re-tematizar todo el starter.
+        // Color de marca. Igual al azul primario del legacy "Venta Retenes"
+        // (#3472F7, hover #1D62F0) — cambia estos valores para re-tematizar
+        // todo el starter.
         brand: {
-          DEFAULT: "#4f46e5",
-          fg: "#4338ca",
-          50: "#eef2ff",
-          100: "#e0e7ff",
-          200: "#c7d2fe",
-          300: "#a5b4fc",
-          400: "#818cf8",
-          500: "#6366f1",
-          600: "#4f46e5",
-          700: "#4338ca",
-          800: "#3730a3",
-          900: "#312e81",
+          DEFAULT: "#3472F7",
+          fg: "#1D62F0",
+          50: "#f4f8ff",
+          100: "#e9f0ff",
+          200: "#d6e4fe",
+          300: "#b6d0fd",
+          400: "#8ab0fb",
+          500: "#5f8ff9",
+          600: "#3472F7",
+          700: "#1D62F0",
+          800: "#1650c4",
+          900: "#113f96",
+        },
+        // Degradado del sidebar legacy ("Light Bootstrap Dashboard", data-color="red").
+        sidebar: {
+          from: "#FB404B",
+          to: "#bb0502",
         },
       },
       keyframes: {

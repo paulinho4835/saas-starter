@@ -12,17 +12,17 @@ const saleItemSchema = z.object({
   productId: z.string().uuid(),
   unitPriceBs: z.number().nonnegative(),
   quantity: z.number().int().positive(),
+  saleType: z.enum(SALE_TYPES as [SaleType, ...SaleType[]]),
 });
 
 const createSaleSchema = z.object({
   customerName: z.string().trim().max(120).optional(),
   customerNit: z.string().trim().max(30).optional(),
-  saleType: z.enum(SALE_TYPES as [SaleType, ...SaleType[]]),
   items: z.array(saleItemSchema).min(1, "Agrega al menos un producto."),
 });
 
 export type CreateSaleResult =
-  | { ok: true; saleId: string; total: number }
+  | { ok: true; saleIds: string[]; total: number }
   | { ok: false; error: string };
 
 // Confirma una venta: valida stock de cada línea en la sucursal del vendedor,
@@ -57,7 +57,6 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
   const parsed = createSaleSchema.safeParse({
     customerName: customerNameRaw ? String(customerNameRaw) : undefined,
     customerNit: customerNitRaw ? String(customerNitRaw) : undefined,
-    saleType: formData.get("saleType"),
     items: itemsRaw,
   });
   if (!parsed.success) {
@@ -173,75 +172,103 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
     resolvedCustomerId = created.id;
   }
 
-  // 4) Crear la venta y sus líneas.
-  const total = calculateSaleTotal(parsed.data.items);
-  const { data: sale, error: saleError } = await supabase
-    .from("sales")
-    .insert({
-      org_id: orgId,
-      branch_id: branchId,
-      seller_id: profile.userId,
-      customer_id: resolvedCustomerId,
-      sale_type: parsed.data.saleType,
-      total_bs: total,
-    })
-    .select("id")
-    .single();
-  if (saleError || !sale) {
-    await revertDecrements();
-    console.error("createSale venta:", saleError?.message);
-    return { ok: false, error: "No se pudo registrar la venta. Tu stock no fue afectado." };
+  // 4) El legacy (Venta Retenes) permite mezclar CF/SF/MAY en una misma
+  // venta: son 3 carritos paralelos que se registran juntos, cada uno
+  // generando su propia fila `sales`. Acá agrupamos las líneas por
+  // `saleType` (cada grupo = un tier concreto) y creamos una venta por
+  // grupo no vacío. El cliente (NIT/nombre) solo se liga a la venta CF —
+  // las ventas SF/MAY quedan con `customer_id = null`, igual que el legacy.
+  const groups = new Map<SaleType, typeof parsed.data.items>();
+  for (const item of parsed.data.items) {
+    const group = groups.get(item.saleType);
+    if (group) group.push(item);
+    else groups.set(item.saleType, [item]);
   }
 
-  const itemsPayload = parsed.data.items.map((item) => ({
-    sale_id: sale.id,
-    product_id: item.productId,
-    price_tier: priceTierForSaleType(parsed.data.saleType),
-    unit_price_bs: item.unitPriceBs,
-    quantity: item.quantity,
-    subtotal_bs: calculateLineSubtotal(item),
-  }));
-  const { error: itemsError } = await supabase.from("sale_items").insert(itemsPayload);
-  if (itemsError) {
-    await supabase.from("sales").delete().eq("id", sale.id);
-    await revertDecrements();
-    console.error("createSale items:", itemsError.message);
-    return { ok: false, error: "No se pudo registrar la venta. Tu stock no fue afectado." };
+  const createdSaleIds: string[] = [];
+
+  async function revertSales() {
+    for (const saleId of createdSaleIds) {
+      await supabase.from("sale_items").delete().eq("sale_id", saleId);
+      await supabase.from("stock_movements").delete().eq("sale_id", saleId);
+      await supabase.from("sales").delete().eq("id", saleId);
+    }
   }
 
-  // 5) Historial de movimientos: una fila por línea vendida, ligada a la venta.
-  const movementsPayload = parsed.data.items.map((item) => {
-    const original = stockByProduct.get(item.productId)!;
-    return {
-      org_id: orgId,
-      product_id: item.productId,
-      branch_id: branchId,
-      movement_type: "venta" as const,
-      quantity_delta: -item.quantity,
-      resulting_quantity: original - item.quantity,
-      reason: null,
-      actor_id: profile.userId,
+  let total = 0;
+  for (const [saleType, items] of groups) {
+    const groupTotal = calculateSaleTotal(items);
+    total += groupTotal;
+    const { data: sale, error: saleError } = await supabase
+      .from("sales")
+      .insert({
+        org_id: orgId,
+        branch_id: branchId,
+        seller_id: profile.userId,
+        customer_id: priceTierForSaleType(saleType) === "cf" ? resolvedCustomerId : null,
+        sale_type: saleType,
+        total_bs: groupTotal,
+      })
+      .select("id")
+      .single();
+    if (saleError || !sale) {
+      await revertSales();
+      await revertDecrements();
+      console.error("createSale venta:", saleError?.message);
+      return { ok: false, error: "No se pudo registrar la venta. Tu stock no fue afectado." };
+    }
+    createdSaleIds.push(sale.id);
+
+    const itemsPayload = items.map((item) => ({
       sale_id: sale.id,
-    };
-  });
-  const { error: movementsError } = await supabase
-    .from("stock_movements")
-    .insert(movementsPayload);
-  if (movementsError) {
-    await supabase.from("sale_items").delete().eq("sale_id", sale.id);
-    await supabase.from("sales").delete().eq("id", sale.id);
-    await revertDecrements();
-    console.error("createSale movements:", movementsError.message);
-    return { ok: false, error: "No se pudo registrar la venta. Tu stock no fue afectado." };
+      product_id: item.productId,
+      price_tier: priceTierForSaleType(saleType),
+      unit_price_bs: item.unitPriceBs,
+      quantity: item.quantity,
+      subtotal_bs: calculateLineSubtotal(item),
+    }));
+    const { error: itemsError } = await supabase.from("sale_items").insert(itemsPayload);
+    if (itemsError) {
+      await revertSales();
+      await revertDecrements();
+      console.error("createSale items:", itemsError.message);
+      return { ok: false, error: "No se pudo registrar la venta. Tu stock no fue afectado." };
+    }
+
+    const movementsPayload = items.map((item) => {
+      const original = stockByProduct.get(item.productId)!;
+      return {
+        org_id: orgId,
+        product_id: item.productId,
+        branch_id: branchId,
+        movement_type: "venta" as const,
+        quantity_delta: -item.quantity,
+        resulting_quantity: original - item.quantity,
+        reason: null,
+        actor_id: profile.userId,
+        sale_id: sale.id,
+      };
+    });
+    const { error: movementsError } = await supabase
+      .from("stock_movements")
+      .insert(movementsPayload);
+    if (movementsError) {
+      await revertSales();
+      await revertDecrements();
+      console.error("createSale movements:", movementsError.message);
+      return { ok: false, error: "No se pudo registrar la venta. Tu stock no fue afectado." };
+    }
   }
 
   revalidatePath("/ventas");
-  return { ok: true, saleId: sale.id, total };
+  return { ok: true, saleIds: createdSaleIds, total: Math.round(total * 100) / 100 };
 }
 
 // ── Stock por sucursal (panel derecho de Ventas) ────────────────────────────
+// El legacy solo muestra el stock de OTRAS sucursales acá (el stock de la
+// sucursal propia ya se ve en la columna "Stock" de la tabla principal).
 export type ProductBranchStockResult =
-  | { ok: true; rows: { branchName: string; quantity: number }[]; notes: string | null }
+  | { ok: true; rows: { branchName: string; quantity: number }[] }
   | { ok: false; error: string };
 
 export async function getProductBranchStock(
@@ -249,16 +276,15 @@ export async function getProductBranchStock(
 ): Promise<ProductBranchStockResult> {
   const profile = await getProfile();
   if (!profile) return { ok: false, error: "Sesión no válida." };
+  if (!profile.branchId) return { ok: true, rows: [] };
 
   const supabase = await createClient();
 
-  const [{ data: stockData, error: stockError }, { data: productData }] = await Promise.all([
-    supabase
-      .from("product_stock")
-      .select("quantity, branches(name)")
-      .eq("product_id", productId),
-    supabase.from("products").select("notes").eq("id", productId).maybeSingle(),
-  ]);
+  const { data: stockData, error: stockError } = await supabase
+    .from("product_stock")
+    .select("quantity, branches(name)")
+    .eq("product_id", productId)
+    .neq("branch_id", profile.branchId);
 
   if (stockError) {
     console.error("getProductBranchStock:", stockError.message);
@@ -269,5 +295,5 @@ export async function getProductBranchStock(
     (r) => ({ branchName: r.branches?.name ?? "—", quantity: r.quantity }),
   );
 
-  return { ok: true, rows, notes: productData?.notes ?? null };
+  return { ok: true, rows };
 }

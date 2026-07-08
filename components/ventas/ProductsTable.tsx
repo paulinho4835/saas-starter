@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Pin } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { ScrollHint } from "@/components/ui/ScrollHint";
@@ -9,7 +10,6 @@ export type ProductResult = {
   id: string;
   code: string;
   application: string | null;
-  notes: string | null;
   brandName: string;
   priceSfBs: number;
   priceCfBs: number;
@@ -33,11 +33,21 @@ const TIER_PRICE: Record<PriceTier, "priceCfBs" | "priceSfBs" | "priceMayBs"> = 
   sf: "priceSfBs",
   may: "priceMayBs",
 };
+// Colores exactos del legacy (public/css/table.css: .verde/.amarillo/.rojo).
 const TIER_ROW_CLASS: Record<PriceTier, string> = {
-  cf: "bg-emerald-100",
-  sf: "bg-yellow-100",
-  may: "bg-rose-100",
+  cf: "bg-[#c2dfc2]",
+  sf: "bg-[#fffccf]",
+  may: "bg-[#ffd6d6]",
 };
+// Variante -intenso del legacy: se aplica a la coincidencia más cercana tras
+// una búsqueda por medida (.verde-intenso/.amarillo-intenso/.rojo-intenso).
+const TIER_ROW_INTENSO: Record<PriceTier, string> = {
+  cf: "bg-[#79c479]",
+  sf: "bg-[#f3f378]",
+  may: "bg-[#ffa4a4]",
+};
+// Fila seleccionada: td.row-selected del legacy (azul claro).
+const SELECTED_ROW_CLASS = "bg-[#ced4ff]";
 const TIERS: PriceTier[] = ["cf", "sf", "may"];
 
 export function ProductsTable({
@@ -51,6 +61,7 @@ export function ProductsTable({
   page,
   totalPages,
   baseQuery,
+  highlightProductIds,
 }: {
   products: ProductResult[];
   selectedProductId: string | null;
@@ -62,8 +73,22 @@ export function ProductsTable({
   page: number;
   totalPages: number;
   baseQuery: string;
+  highlightProductIds?: string[];
 }) {
   const pageItems = pageWindow(page, totalPages);
+  const highlightIdSet = new Set(highlightProductIds ?? []);
+  const firstHighlightedId = products.find((p) => highlightIdSet.has(p.id))?.id ?? null;
+
+  // Auto-scroll a la primera fila resaltada tras una búsqueda por medida,
+  // igual que el legacy baja hasta la fila exacta (nro_registro_cercano). Solo
+  // dispara cuando cambia el conjunto resaltado (una búsqueda nueva), no al
+  // seleccionar o paginar.
+  const highlightRowRef = useRef<HTMLTableRowElement | null>(null);
+  useEffect(() => {
+    if (firstHighlightedId && highlightRowRef.current) {
+      highlightRowRef.current.scrollIntoView({ block: "center", inline: "nearest" });
+    }
+  }, [firstHighlightedId]);
 
   // El link de cada página se arma aquí (cliente) a partir del querystring de
   // filtros activos que llega serializado desde el servidor, porque una
@@ -80,9 +105,18 @@ export function ProductsTable({
     "flex h-9 min-w-9 cursor-not-allowed items-center justify-center rounded-lg border border-slate-100 px-3 text-slate-300";
 
   return (
-    <Card className="overflow-auto">
-      <ScrollHint />
-      <table className="w-full min-w-[820px] text-sm">
+    <Card className="overflow-hidden">
+      {/* Ventana de resultados con scroll interno propio, igual que el legacy
+          (DataTable scrollY:"90vh" + scrollCollapse en ventas.js): la búsqueda
+          se navega DENTRO de esta ventana de altura fija, con su thead estático
+          arriba. El scroll de la página queda libre para bajar al carrito
+          "Productos para la Venta". La altura casi llena el viewport bajo el
+          encabezado para que siempre haya scroll interno (75 productos × 3
+          filas). El auto-scroll a la coincidencia cercana ocurre dentro de esta
+          misma ventana (su scroll ancestro más cercano). */}
+      <div className="ventas-scroll max-h-[calc(100vh-11rem)] overflow-auto">
+        <ScrollHint />
+        <table className="w-full min-w-[820px] text-sm">
         <thead className="sticky top-0 z-10 bg-white">
           <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
             <th className="px-3 py-2"></th>
@@ -103,11 +137,19 @@ export function ProductsTable({
           {products.map((p) => {
             const outOfStock = p.stock <= 0;
             const selected = p.id === selectedProductId;
+            const highlighted = highlightIdSet.has(p.id);
             return TIERS.map((tier, i) => (
               <tr
                 key={`${p.id}-${tier}`}
+                ref={i === 0 && p.id === firstHighlightedId ? highlightRowRef : undefined}
                 onClick={() => onSelectProduct(p)}
-                className={`cursor-pointer ${selected ? "bg-slate-300" : TIER_ROW_CLASS[tier]} ${outOfStock ? "opacity-50" : ""}`}
+                className={`cursor-pointer ${
+                  selected
+                    ? SELECTED_ROW_CLASS
+                    : highlighted
+                      ? TIER_ROW_INTENSO[tier]
+                      : TIER_ROW_CLASS[tier]
+                } ${outOfStock ? "opacity-50" : ""}`}
               >
                 {i === 0 && (
                   <td className="px-3 py-2 align-top" rowSpan={3}>
@@ -136,8 +178,11 @@ export function ProductsTable({
                   </td>
                 )}
                 {i === 0 && (
-                  <td className={`px-3 py-2 align-top font-semibold ${outOfStock ? "text-red-700" : "text-red-600"}`} rowSpan={3}>
-                    {p.stock}
+                  <td className="px-3 py-2 align-top" rowSpan={3}>
+                    {/* Estilo exacto del legacy: <strong style="color:red;letter-spacing:2px">. */}
+                    <strong className={`text-[#ff0000] tracking-[2px] ${outOfStock ? "opacity-70" : ""}`}>
+                      {p.stock}
+                    </strong>
                   </td>
                 )}
                 <td className="px-3 py-2 font-medium text-slate-700">{TIER_LABEL[tier]}</td>
@@ -149,7 +194,9 @@ export function ProductsTable({
                       e.stopPropagation();
                       onPriceClick(p, tier);
                     }}
-                    className="rounded bg-white px-2 py-1 font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    // .btn-pers del legacy: 65x30, sin borde, fondo casi blanco,
+                    // texto negro; hover pasa a azul sólido con texto blanco.
+                    className="h-[30px] w-[65px] rounded-none bg-[#f9f9f9] font-normal text-black transition hover:bg-brand hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                     title="Agregar al carrito con este tipo de venta"
                   >
                     {p[TIER_PRICE[tier]]}
@@ -178,8 +225,9 @@ export function ProductsTable({
               </tr>
             ));
           })}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
 
       {totalPages > 1 && (
         <nav

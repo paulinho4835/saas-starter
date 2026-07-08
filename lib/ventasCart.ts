@@ -3,27 +3,19 @@
 // poder testearlas igual que lib/sales.ts. Ver
 // docs/superpowers/specs/2026-07-07-ventas-legacy-replica-design.md
 
-import { priceTierForSaleType, type SaleType } from "./saleType";
-
 export type PriceTier = "cf" | "sf" | "may";
 
-const TIER_SALE_LABEL: Record<PriceTier, string> = {
-  cf: "Con Factura",
-  sf: "Sin Factura",
-  may: "Mayorista",
-};
+export const PRODUCT_ALREADY_IN_CART_ERROR =
+  "El producto ya está agregado en el carrito de ventas.";
 
-// Una venta = un solo tier de precio (CF/SF/MAY), aunque el `saleType`
-// pueda variar entre la variante QR y no-QR del mismo tier (mismo precio).
-// Devuelve el mensaje de error a mostrar si se intenta agregar un tier
-// distinto al del carrito ya iniciado, o null si es compatible.
-export function tierMismatchError(
-  currentSaleType: SaleType,
-  newTier: PriceTier,
-): string | null {
-  const currentTier = priceTierForSaleType(currentSaleType);
-  if (currentTier === newTier) return null;
-  return `Esta venta ya tiene productos ${TIER_SALE_LABEL[currentTier]}, no se puede mezclar con ${TIER_SALE_LABEL[newTier]}.`;
+// El legacy (Venta Retenes) permite mezclar CF/SF/MAY en una misma venta —
+// son 3 carritos paralelos que se registran juntos al confirmar. Lo único
+// que prohíbe es agregar el MISMO producto dos veces, sin importar el tier.
+export function isProductInCart(
+  cart: { productId: string }[],
+  productId: string,
+): boolean {
+  return cart.some((line) => line.productId === productId);
 }
 
 // Clampa un número de página al rango válido [1, totalPages] (o 1 si no hay

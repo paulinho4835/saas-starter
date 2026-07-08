@@ -8,7 +8,9 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-lg bg-white shadow-sm ring-1 ring-slate-200",
+        // Radio y sombra calcados del legacy: .card { border-radius: 4px;
+        // box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 0 0 1px rgba(63,63,68,.1); }
+        "rounded-[4px] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05),0_0_0_1px_rgba(63,63,68,0.1)]",
         className,
       )}
       {...props}

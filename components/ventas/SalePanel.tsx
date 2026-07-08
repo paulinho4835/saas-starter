@@ -6,24 +6,31 @@ import { PinOff } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/lib/toast";
-import { priceTierForSaleType, type SaleType } from "@/lib/saleType";
-import { tierMismatchError, type PriceTier } from "@/lib/ventasCart";
+import type { SaleType } from "@/lib/saleType";
+import { isProductInCart, PRODUCT_ALREADY_IN_CART_ERROR, type PriceTier } from "@/lib/ventasCart";
+import { calculateSaleTotal } from "@/lib/sales";
 import { createSale } from "@/app/(dashboard)/ventas/actions";
 import { ProductsTable, type ProductResult } from "@/components/ventas/ProductsTable";
-import { CartPanel, type CartLine } from "@/components/ventas/CartPanel";
+import { CartPanel, type CartLine, type PaymentMethod } from "@/components/ventas/CartPanel";
 import { AddToCartModal, type AddToCartModalProduct, type AddToCartLine } from "@/components/ventas/AddToCartModal";
 import { BranchStockPanel } from "@/components/ventas/BranchStockPanel";
 import { ExchangeRateModal } from "@/components/ventas/ExchangeRateModal";
+import { SaleInvoiceModal } from "@/components/ventas/SaleInvoiceModal";
 
 // Anclados: personales por navegador (no por org). Ver comentario original
 // en el historial de este archivo.
 const PINNED_STORAGE_KEY = "ventas:pinnedProducts";
 
-const DEFAULT_SALE_TYPE_FOR_TIER: Record<PriceTier, SaleType> = {
-  cf: "con_factura",
-  sf: "sin_factura",
-  may: "mayorista",
-};
+// El legacy (Venta Retenes) permite mezclar CF/SF/MAY en una misma venta —
+// son 3 carritos paralelos que se registran juntos al confirmar (hasta 3
+// filas `sales`, una por tier no vacío). El método de pago (efectivo/QR) es
+// una capa nuestra encima del tier, sin equivalente en el legacy; "may" no
+// tiene variante QR en el esquema, así que siempre cae en "mayorista".
+function saleTypeForLine(tier: PriceTier, paymentMethod: PaymentMethod): SaleType {
+  if (tier === "may") return "mayorista";
+  if (tier === "cf") return paymentMethod === "qr" ? "con_factura_qr" : "con_factura";
+  return paymentMethod === "qr" ? "sin_factura_qr" : "sin_factura";
+}
 
 const TIER_PRICE: Record<PriceTier, "priceCfBs" | "priceSfBs" | "priceMayBs"> = {
   cf: "priceCfBs",
@@ -37,6 +44,7 @@ export function SalePanel({
   page,
   totalPages,
   baseQuery,
+  highlightProductIds,
   exchangeRate,
   canEditExchangeRate,
 }: {
@@ -45,18 +53,19 @@ export function SalePanel({
   page: number;
   totalPages: number;
   baseQuery: string;
+  highlightProductIds: string[];
   exchangeRate: number;
   canEditExchangeRate: boolean;
 }) {
-  const [saleType, setSaleType] = useState<SaleType>("sin_factura");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("efectivo");
+  const [lastTier, setLastTier] = useState<PriceTier>("sf");
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [customerName, setCustomerName] = useState("");
-  const [customerNit, setCustomerNit] = useState("");
   const [loading, setLoading] = useState(false);
   const [pinned, setPinned] = useState<ProductResult[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [modalProduct, setModalProduct] = useState<AddToCartModalProduct | null>(null);
   const [exchangeRateModalOpen, setExchangeRateModalOpen] = useState(false);
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -97,19 +106,17 @@ export function SalePanel({
   }
 
   // Devuelve el mensaje de error a AddToCartModal (que lo muestra sin
-  // cerrarse) o null si la línea se agregó con éxito.
+  // cerrarse) o null si la línea se agregó con éxito. El legacy solo
+  // prohíbe repetir el MISMO producto en el carrito, sin importar el tier.
   function handleAddLine(line: AddToCartLine): string | null {
-    if (cart.length > 0) {
-      const err = tierMismatchError(saleType, line.tier);
-      if (err) return err;
-    } else {
-      setSaleType(DEFAULT_SALE_TYPE_FOR_TIER[line.tier]);
-    }
+    if (isProductInCart(cart, line.productId)) return PRODUCT_ALREADY_IN_CART_ERROR;
+    setLastTier(line.tier);
     setCart((prev) => [
       ...prev,
       {
         productId: line.productId,
         code: line.code,
+        tier: line.tier,
         unitPriceBs: String(line.unitPriceBs),
         quantity: String(line.quantity),
         maxStock: modalProduct?.stock ?? 0,
@@ -117,17 +124,6 @@ export function SalePanel({
     ]);
     toast("Añadido en productos para la venta");
     return null;
-  }
-
-  function changeSaleType(next: SaleType) {
-    if (cart.length > 0) {
-      const err = tierMismatchError(saleType, priceTierForSaleType(next));
-      if (err) {
-        toast(err, "error");
-        return;
-      }
-    }
-    setSaleType(next);
   }
 
   function searchEquivalents(product: ProductResult) {
@@ -144,7 +140,43 @@ export function SalePanel({
     setCart((prev) => prev.filter((_, i) => i !== index));
   }
 
-  async function onConfirm() {
+  // Envía la venta al servidor. `customerName`/`customerNit` solo llegan
+  // cuando el carrito tiene líneas CF (los rellena SaleInvoiceModal); sin
+  // líneas CF se vende directo sin pedir cliente, igual que
+  // validar_productos_para_venta() en el legacy.
+  async function submitSale(customerName?: string, customerNit?: string) {
+    setLoading(true);
+    const formData = new FormData();
+    if (customerName) formData.set("customerName", customerName);
+    if (customerNit) formData.set("customerNit", customerNit);
+    formData.set(
+      "items",
+      JSON.stringify(
+        cart.map((l) => ({
+          productId: l.productId,
+          unitPriceBs: Number(l.unitPriceBs),
+          quantity: Number(l.quantity),
+          saleType: saleTypeForLine(l.tier, paymentMethod),
+        })),
+      ),
+    );
+    const res = await createSale(formData);
+    setLoading(false);
+    if (!res.ok) {
+      toast(res.error, "error");
+      return;
+    }
+    toast(`Venta registrada: ${res.total} Bs.`);
+    setCart([]);
+    setInvoiceModalOpen(false);
+    router.refresh();
+  }
+
+  // El legacy (validar_productos_para_venta) solo vende directo si el
+  // carrito CF está vacío; si hay líneas CF, en vez de vender abre el modal
+  // "Datos de Venta con Factura" (modal_formulario_cliente.blade.php) a
+  // pedir NIT y nombre del cliente antes de confirmar.
+  function onConfirmClick() {
     if (cart.length === 0) {
       toast("Agrega al menos un producto.", "error");
       return;
@@ -160,33 +192,19 @@ export function SalePanel({
       return;
     }
 
-    setLoading(true);
-    const formData = new FormData();
-    if (customerName) formData.set("customerName", customerName);
-    if (customerNit) formData.set("customerNit", customerNit);
-    formData.set("saleType", saleType);
-    formData.set(
-      "items",
-      JSON.stringify(
-        cart.map((l) => ({
-          productId: l.productId,
-          unitPriceBs: Number(l.unitPriceBs),
-          quantity: Number(l.quantity),
-        })),
-      ),
-    );
-    const res = await createSale(formData);
-    setLoading(false);
-    if (!res.ok) {
-      toast(res.error, "error");
+    const hasCfLines = cart.some((l) => l.tier === "cf");
+    if (hasCfLines) {
+      setInvoiceModalOpen(true);
       return;
     }
-    toast(`Venta registrada: ${res.total} Bs.`);
-    setCart([]);
-    setCustomerName("");
-    setCustomerNit("");
-    router.refresh();
+    void submitSale();
   }
+
+  const montoCf = calculateSaleTotal(
+    cart
+      .filter((l) => l.tier === "cf")
+      .map((l) => ({ unitPriceBs: Number(l.unitPriceBs) || 0, quantity: Number(l.quantity) || 0 })),
+  );
 
   return (
     <div className="space-y-6">
@@ -208,10 +226,10 @@ export function SalePanel({
                     </span>
                     <button
                       type="button"
-                      onClick={() => openAddModal(p, priceTierForSaleType(saleType))}
+                      onClick={() => openAddModal(p, lastTier)}
                       className="rounded-full bg-brand-600 px-2 py-0.5 font-medium text-white hover:bg-brand-700"
                     >
-                      Agregar {p[TIER_PRICE[priceTierForSaleType(saleType)]]} Bs
+                      Agregar {p[TIER_PRICE[lastTier]]} Bs
                     </button>
                     <button
                       type="button"
@@ -238,6 +256,7 @@ export function SalePanel({
             page={page}
             totalPages={totalPages}
             baseQuery={baseQuery}
+            highlightProductIds={highlightProductIds}
           />
         </div>
 
@@ -265,19 +284,23 @@ export function SalePanel({
       </div>
 
       <CartPanel
-        saleType={saleType}
-        onChangeSaleType={changeSaleType}
+        paymentMethod={paymentMethod}
+        onChangePaymentMethod={setPaymentMethod}
         cart={cart}
         onRemoveLine={removeLine}
-        customerName={customerName}
-        onChangeCustomerName={setCustomerName}
-        customerNit={customerNit}
-        onChangeCustomerNit={setCustomerNit}
         loading={loading}
-        onConfirm={onConfirm}
+        onConfirm={onConfirmClick}
       />
 
       <AddToCartModal product={modalProduct} onClose={() => setModalProduct(null)} onAdd={handleAddLine} />
+
+      <SaleInvoiceModal
+        open={invoiceModalOpen}
+        onClose={() => setInvoiceModalOpen(false)}
+        montoCf={montoCf}
+        loading={loading}
+        onConfirm={(name, nit) => void submitSale(name, nit)}
+      />
 
       {canEditExchangeRate && (
         <ExchangeRateModal

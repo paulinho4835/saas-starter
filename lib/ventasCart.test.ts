@@ -1,26 +1,18 @@
 // lib/ventasCart.test.ts
 import { describe, expect, it } from "vitest";
-import { tierMismatchError, clampPage, pageWindow, isValidCartQuantity, isValidCartPrice } from "./ventasCart";
+import { isProductInCart, clampPage, pageWindow, isValidCartQuantity, isValidCartPrice } from "./ventasCart";
 
-describe("tierMismatchError", () => {
-  it("returns null when the new tier matches the current sale type's tier", () => {
-    expect(tierMismatchError("con_factura", "cf")).toBeNull();
+describe("isProductInCart", () => {
+  it("returns false for an empty cart", () => {
+    expect(isProductInCart([], "p1")).toBe(false);
   });
 
-  it("returns null for the QR variant of the same tier", () => {
-    expect(tierMismatchError("con_factura_qr", "cf")).toBeNull();
+  it("returns true when the product is already in the cart under any tier", () => {
+    expect(isProductInCart([{ productId: "p1" }, { productId: "p2" }], "p1")).toBe(true);
   });
 
-  it("returns an error message when tiers differ", () => {
-    expect(tierMismatchError("con_factura", "sf")).toBe(
-      "Esta venta ya tiene productos Con Factura, no se puede mezclar con Sin Factura.",
-    );
-  });
-
-  it("returns an error message comparing mayorista against sin_factura", () => {
-    expect(tierMismatchError("mayorista", "sf")).toBe(
-      "Esta venta ya tiene productos Mayorista, no se puede mezclar con Sin Factura.",
-    );
+  it("returns false when the product is not in the cart", () => {
+    expect(isProductInCart([{ productId: "p1" }], "p2")).toBe(false);
   });
 });
 

@@ -9,7 +9,7 @@ import { cn } from "@/lib/cn";
 function NavIcon({ icon }: { icon: React.ReactNode }) {
   const { pending } = useLinkStatus();
   return (
-    <span className="shrink-0 text-slate-400">
+    <span className="shrink-0 text-white/70">
       {pending ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : icon}
     </span>
   );
@@ -36,10 +36,10 @@ export function NavLink({
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition",
+        "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-white transition",
         active
-          ? "bg-brand/10 font-semibold text-brand"
-          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+          ? "bg-white font-semibold text-sidebar-to [&_span]:text-sidebar-to"
+          : "hover:bg-white/10",
       )}
     >
       <NavIcon icon={icon} />

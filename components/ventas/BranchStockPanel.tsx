@@ -60,10 +60,10 @@ export function BranchStockPanel({ product }: { product: ProductResult | null })
         <FieldLabel>Aplicación producto</FieldLabel>
         <textarea
           disabled
-          rows={4}
+          rows={12}
           value={product?.application ?? ""}
           placeholder={product ? "Este producto no tiene aplicación registrada." : "Selecciona un producto."}
-          className={fieldInputClass}
+          className={`${fieldInputClass} font-bold`}
         />
       </label>
     </Card>

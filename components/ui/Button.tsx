@@ -12,7 +12,8 @@ const buttonVariants = cva(
         primary: "bg-brand text-white hover:bg-brand-fg",
         secondary:
           "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
-        danger: "border border-red-300 bg-white text-red-600 hover:bg-red-50",
+        // .btn-danger del legacy (Bootstrap 3): rojo sólido, sin borde.
+        danger: "bg-[#d9534f] text-white hover:bg-[#c9302c]",
         ghost: "text-slate-600 hover:bg-slate-100",
         dark: "bg-night text-white hover:bg-night-soft",
       },

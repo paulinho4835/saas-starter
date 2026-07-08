@@ -25,7 +25,9 @@
   --slate-900: 15 23 42;
   --slate-950: 2 6 23;
 
-  --background: #f8fafc;
+  /* Fondo de página del legacy: gris muy claro (rgba(203,203,210,0.15) sobre
+     blanco ≈ #f7f7f8). */
+  --background: #f7f7f8;
   --foreground: #0f172a;
 }
 
@@ -107,4 +109,33 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", sans-serif;
+}
+
+/*
+  Scrollbar ancho del legacy para la ventana de resultados de Ventas.
+  El legacy estiliza `.dataTables_scrollBody::-webkit-scrollbar` con
+  width:30px, track gris claro con sombra interior y thumb #C0C0C0 redondeado
+  (public/css/table.css). Se replica aquí sobre `.ventas-scroll`, la ventana de
+  altura fija que se navega con su propio scroll (independiente del scroll de
+  página que baja al carrito). Se reduce a 14px para que siga siendo usable en
+  pantalla ancha manteniendo el aspecto grueso del original.
+*/
+.ventas-scroll::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+  background-color: white;
+}
+.ventas-scroll::-webkit-scrollbar-track {
+  -webkit-box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  background-color: #f5f5f5;
+}
+.ventas-scroll::-webkit-scrollbar-thumb {
+  border-radius: 5px;
+  -webkit-box-shadow: inset 0 0 6px rgba(122, 122, 122, 0.3);
+  background-color: #c0c0c0;
+}
+/* Firefox: no soporta pseudo-elementos, pero sí el ancho/colores base. */
+.ventas-scroll {
+  scrollbar-color: #c0c0c0 #f5f5f5;
 }
