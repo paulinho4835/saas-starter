@@ -25,9 +25,9 @@ export type CreateTransferResult = { ok: true } | { ok: false; error: string };
 
 async function createTransferGroups(
   formData: FormData,
-  rpcName: "create_transfer_pedido" | "create_transfer_envio",
   branchRole: "from" | "to",
 ): Promise<CreateTransferResult> {
+  const transferType = branchRole === "from" ? "pedido" : "envio";
   const profile = await getProfile();
   if (!profile) return { ok: false, error: "Sesión no válida." };
   if (!can(profile.role, "traspasos:create")) {
@@ -57,16 +57,25 @@ async function createTransferGroups(
     if (!validBranch) {
       return { ok: false, error: "Alguna de las sucursales seleccionadas no es válida." };
     }
-    const items = group.items.map((i) => ({ product_id: i.productId, quantity: i.quantity }));
-    const { error } = await supabase.rpc(rpcName, {
-      p_org_id: profile.orgId,
-      p_from_branch_id: branchRole === "from" ? group.branchId : profile.branchId,
-      p_to_branch_id: branchRole === "from" ? profile.branchId : group.branchId,
-      p_actor_id: profile.userId,
-      p_items: items,
-    });
-    if (error) return { ok: false, error: error.message };
   }
+
+  // Un carrito puede generar varios `transfers` (uno por sucursal). Se
+  // envían todos los grupos en UNA sola llamada RPC = una sola transacción
+  // Postgres, para que un fallo a mitad de camino no deje grupos previos
+  // ya comprometidos (ver create_transfer_groups en
+  // 0017_traspasos_atomic_groups.sql).
+  const groupsPayload = parsed.data.groups.map((group) => ({
+    branch_id: group.branchId,
+    items: group.items.map((i) => ({ product_id: i.productId, quantity: i.quantity })),
+  }));
+  const { error } = await supabase.rpc("create_transfer_groups", {
+    p_org_id: profile.orgId,
+    p_own_branch_id: profile.branchId,
+    p_actor_id: profile.userId,
+    p_type: transferType,
+    p_groups: groupsPayload,
+  });
+  if (error) return { ok: false, error: error.message };
 
   revalidatePath("/traspasos");
   return { ok: true };
@@ -76,13 +85,13 @@ async function createTransferGroups(
 // sucursal (from_branch_id = la sucursal elegida), quedará a nombre de la
 // propia (to_branch_id).
 export async function createTransferRequest(formData: FormData): Promise<CreateTransferResult> {
-  return createTransferGroups(formData, "create_transfer_pedido", "from");
+  return createTransferGroups(formData, "from");
 }
 
 // Crea un Envío por cada sucursal del carrito: manda stock propio
 // (from_branch_id = la propia) a la sucursal elegida (to_branch_id).
 export async function createTransferShipment(formData: FormData): Promise<CreateTransferResult> {
-  return createTransferGroups(formData, "create_transfer_envio", "to");
+  return createTransferGroups(formData, "to");
 }
 
 const advanceSchema = z.object({
@@ -140,6 +149,9 @@ export async function validateTransferQuantity(
 ): Promise<ValidateTransferQuantityResult> {
   const profile = await getProfile();
   if (!profile) return { ok: false, error: "Sesión no válida." };
+  if (!can(profile.role, "traspasos:create")) {
+    return { ok: false, error: "No tienes permiso para hacer traspasos." };
+  }
   const parsed = validateQuantitySchema.safeParse({
     productId: formData.get("productId"),
     branchId: formData.get("branchId"),
@@ -173,6 +185,9 @@ export type ProductBranchStockResult =
 export async function getTransferProductStock(productId: string): Promise<ProductBranchStockResult> {
   const profile = await getProfile();
   if (!profile) return { ok: false, error: "Sesión no válida." };
+  if (!can(profile.role, "traspasos:create")) {
+    return { ok: false, error: "No tienes permiso para hacer traspasos." };
+  }
   if (!profile.branchId) return { ok: true, rows: [] };
 
   const supabase = await createClient();
