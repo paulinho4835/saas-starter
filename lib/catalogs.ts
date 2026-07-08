@@ -67,3 +67,34 @@ export async function verifyBranchInOrg(
     .maybeSingle();
   return !!data;
 }
+
+// Get-or-create para Marca/Familia/Procedencia al guardar un producto: si el
+// nombre escrito no existe todavía en la org (comparación case-insensitive,
+// trim), se crea en MAYÚSCULAS — igual que validar_foranea_producto() del
+// legacy. Reintenta la búsqueda si el insert falla por una carrera (otro
+// request creó el mismo nombre entre el select y el insert).
+export async function resolveOrCreateCatalogEntry(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  table: SimpleCatalogTable,
+  orgId: string,
+  name: string,
+): Promise<string> {
+  const trimmed = name.trim();
+  const { data: existing } = await supabase.from(table).select("id, name").eq("org_id", orgId);
+  const match = (existing ?? []).find((row) => row.name.toLowerCase() === trimmed.toLowerCase());
+  if (match) return match.id;
+
+  const upper = trimmed.toUpperCase();
+  const { data: inserted, error } = await supabase
+    .from(table)
+    .insert({ org_id: orgId, name: upper })
+    .select("id")
+    .single();
+  if (error) {
+    const { data: retry } = await supabase.from(table).select("id, name").eq("org_id", orgId);
+    const retryMatch = (retry ?? []).find((row) => row.name.toLowerCase() === upper.toLowerCase());
+    if (retryMatch) return retryMatch.id;
+    throw new Error(`No se pudo resolver/crear "${trimmed}" en ${table}: ${error.message}`);
+  }
+  return inserted!.id;
+}

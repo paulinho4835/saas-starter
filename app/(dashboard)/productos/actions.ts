@@ -11,6 +11,7 @@ import {
   deleteCatalogEntry,
   catalogNameSchema,
   verifyBranchInOrg,
+  resolveOrCreateCatalogEntry,
 } from "@/lib/catalogs";
 
 export type ActionResult = { ok: boolean; error?: string };
@@ -111,9 +112,9 @@ export async function deleteOrigin(id: string): Promise<ActionResult> {
 // ── Productos ────────────────────────────────────────────────────────────
 const productSchema = z.object({
   code: z.string().trim().min(1, "El código es obligatorio.").max(80),
-  brand_id: z.string().uuid("Selecciona una marca."),
-  family_id: z.string().uuid("Selecciona una familia."),
-  origin_id: z.string().uuid().optional().or(z.literal("")),
+  brand: z.string().trim().min(1, "La marca es obligatoria.").max(120),
+  family: z.string().trim().min(1, "La familia es obligatoria.").max(120),
+  origin: z.string().trim().max(120).optional().or(z.literal("")),
   supplier_id: z.string().uuid().optional().or(z.literal("")),
   internal_mm: z.coerce.number().optional(),
   external_mm: z.coerce.number().optional(),
@@ -124,16 +125,15 @@ const productSchema = z.object({
   notes: z.string().trim().max(500).optional().or(z.literal("")),
   cost_usd: z.coerce.number().min(0, "El costo no puede ser negativo."),
   margin_sf_pct: z.coerce.number(),
-  margin_cf_pct: z.coerce.number(),
   margin_may_pct: z.coerce.number(),
 });
 
 function parseProductForm(formData: FormData) {
   return productSchema.safeParse({
     code: formData.get("code"),
-    brand_id: formData.get("brand_id"),
-    family_id: formData.get("family_id"),
-    origin_id: formData.get("origin_id"),
+    brand: formData.get("brand"),
+    family: formData.get("family"),
+    origin: formData.get("origin"),
     supplier_id: formData.get("supplier_id"),
     internal_mm: formData.get("internal_mm") || undefined,
     external_mm: formData.get("external_mm") || undefined,
@@ -144,7 +144,6 @@ function parseProductForm(formData: FormData) {
     notes: formData.get("notes"),
     cost_usd: formData.get("cost_usd"),
     margin_sf_pct: formData.get("margin_sf_pct"),
-    margin_cf_pct: formData.get("margin_cf_pct"),
     margin_may_pct: formData.get("margin_may_pct"),
   });
 }
@@ -176,11 +175,29 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
   }
   const exchangeRate = await getOrgExchangeRate(supabase, profile.orgId);
 
+  let brandId: string;
+  let familyId: string;
+  let originId: string | null;
+  try {
+    brandId = await resolveOrCreateCatalogEntry(supabase, "product_brands", profile.orgId, parsed.data.brand);
+    familyId = await resolveOrCreateCatalogEntry(
+      supabase,
+      "product_families",
+      profile.orgId,
+      parsed.data.family,
+    );
+    originId = parsed.data.origin
+      ? await resolveOrCreateCatalogEntry(supabase, "product_origins", profile.orgId, parsed.data.origin)
+      : null;
+  } catch (err) {
+    console.error("createProduct catálogos:", err);
+    return { ok: false, error: "No se pudo resolver marca/familia/procedencia." };
+  }
+
   const prices = calculatePrices({
     costUsd: parsed.data.cost_usd,
     exchangeRate,
     marginSfPct: parsed.data.margin_sf_pct,
-    marginCfPct: parsed.data.margin_cf_pct,
     marginMayPct: parsed.data.margin_may_pct,
   });
 
@@ -189,9 +206,9 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
     .insert({
       org_id: profile.orgId,
       code: parsed.data.code,
-      brand_id: parsed.data.brand_id,
-      family_id: parsed.data.family_id,
-      origin_id: parsed.data.origin_id || null,
+      brand_id: brandId,
+      family_id: familyId,
+      origin_id: originId,
       supplier_id: parsed.data.supplier_id || null,
       internal_mm: parsed.data.internal_mm ?? null,
       external_mm: parsed.data.external_mm ?? null,
@@ -203,7 +220,7 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
       cost_usd: parsed.data.cost_usd,
       exchange_rate: exchangeRate,
       margin_sf_pct: parsed.data.margin_sf_pct,
-      margin_cf_pct: parsed.data.margin_cf_pct,
+      margin_cf_pct: prices.marginCfPct,
       margin_may_pct: parsed.data.margin_may_pct,
       price_sf_bs: prices.priceSfBs,
       price_cf_bs: prices.priceCfBs,
@@ -227,10 +244,7 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
   });
   if (stockError) {
     console.error("createProduct stock:", stockError.message);
-    const { error: rollbackError } = await supabase
-      .from("products")
-      .delete()
-      .eq("id", product.id);
+    const { error: rollbackError } = await supabase.from("products").delete().eq("id", product.id);
     if (rollbackError) {
       console.error(
         "createProduct rollback failed, orphaned product row:",
@@ -281,10 +295,7 @@ export async function createProduct(formData: FormData): Promise<ActionResult> {
   return { ok: true };
 }
 
-export async function updateProduct(
-  id: string,
-  formData: FormData,
-): Promise<ActionResult> {
+export async function updateProduct(id: string, formData: FormData): Promise<ActionResult> {
   const profile = await getProfile();
   if (!profile) return { ok: false, error: "Sesión no válida." };
   if (!can(profile.role, "productos:write")) {
@@ -299,11 +310,29 @@ export async function updateProduct(
   const supabase = await createClient();
   const exchangeRate = await getOrgExchangeRate(supabase, profile.orgId);
 
+  let brandId: string;
+  let familyId: string;
+  let originId: string | null;
+  try {
+    brandId = await resolveOrCreateCatalogEntry(supabase, "product_brands", profile.orgId, parsed.data.brand);
+    familyId = await resolveOrCreateCatalogEntry(
+      supabase,
+      "product_families",
+      profile.orgId,
+      parsed.data.family,
+    );
+    originId = parsed.data.origin
+      ? await resolveOrCreateCatalogEntry(supabase, "product_origins", profile.orgId, parsed.data.origin)
+      : null;
+  } catch (err) {
+    console.error("updateProduct catálogos:", err);
+    return { ok: false, error: "No se pudo resolver marca/familia/procedencia." };
+  }
+
   const prices = calculatePrices({
     costUsd: parsed.data.cost_usd,
     exchangeRate,
     marginSfPct: parsed.data.margin_sf_pct,
-    marginCfPct: parsed.data.margin_cf_pct,
     marginMayPct: parsed.data.margin_may_pct,
   });
 
@@ -311,9 +340,9 @@ export async function updateProduct(
     .from("products")
     .update({
       code: parsed.data.code,
-      brand_id: parsed.data.brand_id,
-      family_id: parsed.data.family_id,
-      origin_id: parsed.data.origin_id || null,
+      brand_id: brandId,
+      family_id: familyId,
+      origin_id: originId,
       supplier_id: parsed.data.supplier_id || null,
       internal_mm: parsed.data.internal_mm ?? null,
       external_mm: parsed.data.external_mm ?? null,
@@ -325,7 +354,7 @@ export async function updateProduct(
       cost_usd: parsed.data.cost_usd,
       exchange_rate: exchangeRate,
       margin_sf_pct: parsed.data.margin_sf_pct,
-      margin_cf_pct: parsed.data.margin_cf_pct,
+      margin_cf_pct: prices.marginCfPct,
       margin_may_pct: parsed.data.margin_may_pct,
       price_sf_bs: prices.priceSfBs,
       price_cf_bs: prices.priceCfBs,
@@ -353,7 +382,7 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.from("products").delete().eq("id", id);
+  const { error } = await supabase.from("products").update({ active: false }).eq("id", id);
   if (error) {
     console.error("deleteProduct:", error.message);
     return { ok: false, error: "No se pudo eliminar el producto." };
