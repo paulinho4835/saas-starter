@@ -7,62 +7,188 @@ import { getProfile } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { verifyBranchInOrg } from "@/lib/catalogs";
 
-export type TransferBetweenBranchesResult = { ok: true } | { ok: false; error: string };
-
-const transferSchema = z.object({
+const transferItemSchema = z.object({
   productId: z.string().uuid(),
-  fromBranchId: z.string().uuid(),
-  toBranchId: z.string().uuid(),
-  quantity: z.coerce.number().int().positive("La cantidad debe ser un entero mayor a 0."),
+  quantity: z.coerce.number().int().positive(),
 });
 
-// Traspaso general entre dos sucursales cualesquiera (a diferencia de
-// Almacén, que solo transfiere desde el almacén). Reutiliza el mismo RPC
-// atómico `transfer_stock` (ver docs/superpowers/specs/2026-07-02-traspasos-design.md).
-// A diferencia de Almacén, fromBranchId viene del cliente (la fila sobre la
-// que se hizo clic) — se revalida server-side contra la org igual que toBranchId.
-export async function transferBetweenBranches(formData: FormData): Promise<TransferBetweenBranchesResult> {
+const transferGroupSchema = z.object({
+  branchId: z.string().uuid(),
+  items: z.array(transferItemSchema).min(1),
+});
+
+const createTransferSchema = z.object({
+  groups: z.array(transferGroupSchema).min(1, "Agrega al menos un producto."),
+});
+
+export type CreateTransferResult = { ok: true } | { ok: false; error: string };
+
+async function createTransferGroups(
+  formData: FormData,
+  rpcName: "create_transfer_pedido" | "create_transfer_envio",
+  branchRole: "from" | "to",
+): Promise<CreateTransferResult> {
   const profile = await getProfile();
   if (!profile) return { ok: false, error: "Sesión no válida." };
   if (!can(profile.role, "traspasos:create")) {
-    return { ok: false, error: "No tienes permiso para hacer traspasos entre sucursales." };
+    return { ok: false, error: "No tienes permiso para hacer traspasos." };
+  }
+  if (!profile.branchId) {
+    return { ok: false, error: "No tienes una sucursal asignada." };
   }
 
-  const parsed = transferSchema.safeParse({
+  let raw: unknown;
+  try {
+    raw = JSON.parse(String(formData.get("groups") ?? "[]"));
+  } catch {
+    return { ok: false, error: "Carrito inválido." };
+  }
+  const parsed = createTransferSchema.safeParse({ groups: raw });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  for (const group of parsed.data.groups) {
+    if (group.branchId === profile.branchId) {
+      return { ok: false, error: "La sucursal de origen y destino no pueden ser la misma." };
+    }
+    const validBranch = await verifyBranchInOrg(supabase, group.branchId, profile.orgId);
+    if (!validBranch) {
+      return { ok: false, error: "Alguna de las sucursales seleccionadas no es válida." };
+    }
+    const items = group.items.map((i) => ({ product_id: i.productId, quantity: i.quantity }));
+    const { error } = await supabase.rpc(rpcName, {
+      p_org_id: profile.orgId,
+      p_from_branch_id: branchRole === "from" ? group.branchId : profile.branchId,
+      p_to_branch_id: branchRole === "from" ? profile.branchId : group.branchId,
+      p_actor_id: profile.userId,
+      p_items: items,
+    });
+    if (error) return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/traspasos");
+  return { ok: true };
+}
+
+// Crea un Pedido por cada sucursal del carrito: solicita stock a esa
+// sucursal (from_branch_id = la sucursal elegida), quedará a nombre de la
+// propia (to_branch_id).
+export async function createTransferRequest(formData: FormData): Promise<CreateTransferResult> {
+  return createTransferGroups(formData, "create_transfer_pedido", "from");
+}
+
+// Crea un Envío por cada sucursal del carrito: manda stock propio
+// (from_branch_id = la propia) a la sucursal elegida (to_branch_id).
+export async function createTransferShipment(formData: FormData): Promise<CreateTransferResult> {
+  return createTransferGroups(formData, "create_transfer_envio", "to");
+}
+
+const advanceSchema = z.object({
+  transferId: z.string().uuid(),
+  nextStatus: z.enum(["en_cola", "enviando", "entregado", "rechazado", "cancelado"]),
+});
+
+export type AdvanceTransferResult = { ok: true } | { ok: false; error: string };
+
+export async function advanceTransferStatus(formData: FormData): Promise<AdvanceTransferResult> {
+  const profile = await getProfile();
+  if (!profile) return { ok: false, error: "Sesión no válida." };
+  if (!can(profile.role, "traspasos:create")) {
+    return { ok: false, error: "No tienes permiso para hacer traspasos." };
+  }
+  if (!profile.branchId) {
+    return { ok: false, error: "No tienes una sucursal asignada." };
+  }
+  const parsed = advanceSchema.safeParse({
+    transferId: formData.get("transferId"),
+    nextStatus: formData.get("nextStatus"),
+  });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("advance_transfer", {
+    p_transfer_id: parsed.data.transferId,
+    p_actor_id: profile.userId,
+    p_actor_branch_id: profile.branchId,
+    p_next_status: parsed.data.nextStatus,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/traspasos");
+  return { ok: true };
+}
+
+const validateQuantitySchema = z.object({
+  productId: z.string().uuid(),
+  branchId: z.string().uuid(),
+  quantity: z.coerce.number().int().positive(),
+});
+
+export type ValidateTransferQuantityResult = { ok: true } | { ok: false; error: string };
+
+// Valida que la cantidad pedida/enviada no exceda el stock ACTUAL de la
+// sucursal relevante (para Pedido: la sucursal elegida como origen; para
+// Envío: siempre la propia) antes de agregarla al carrito — igual que
+// agregar_producto_carrito() del legacy, que revisa Existencia antes de
+// aceptar la línea en el carrito de sesión.
+export async function validateTransferQuantity(
+  formData: FormData,
+): Promise<ValidateTransferQuantityResult> {
+  const profile = await getProfile();
+  if (!profile) return { ok: false, error: "Sesión no válida." };
+  const parsed = validateQuantitySchema.safeParse({
     productId: formData.get("productId"),
-    fromBranchId: formData.get("fromBranchId"),
-    toBranchId: formData.get("toBranchId"),
+    branchId: formData.get("branchId"),
     quantity: formData.get("quantity"),
   });
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
   }
-  if (parsed.data.fromBranchId === parsed.data.toBranchId) {
-    return { ok: false, error: "La sucursal de origen y destino no pueden ser la misma." };
-  }
 
   const supabase = await createClient();
-
-  const [fromValid, toValid] = await Promise.all([
-    verifyBranchInOrg(supabase, parsed.data.fromBranchId, profile.orgId),
-    verifyBranchInOrg(supabase, parsed.data.toBranchId, profile.orgId),
-  ]);
-  if (!fromValid || !toValid) {
-    return { ok: false, error: "Alguna de las sucursales seleccionadas no es válida." };
+  const { data } = await supabase
+    .from("product_stock")
+    .select("quantity")
+    .eq("product_id", parsed.data.productId)
+    .eq("branch_id", parsed.data.branchId)
+    .maybeSingle();
+  const available = data?.quantity ?? 0;
+  if (parsed.data.quantity > available) {
+    return { ok: false, error: `La cantidad debe estar entre 0 y ${available}.` };
   }
-
-  const { error } = await supabase.rpc("transfer_stock", {
-    p_org_id: profile.orgId,
-    p_product_id: parsed.data.productId,
-    p_from_branch_id: parsed.data.fromBranchId,
-    p_to_branch_id: parsed.data.toBranchId,
-    p_quantity: parsed.data.quantity,
-    p_actor_id: profile.userId,
-  });
-  if (error) {
-    return { ok: false, error: error.message };
-  }
-
-  revalidatePath("/traspasos");
   return { ok: true };
+}
+
+// Stock del producto en TODAS las sucursales salvo la propia — panel "Datos
+// adicionales" de la pestaña Solicitud/Envío (igual que
+// Producto::cantidades_sucursales() del legacy).
+export type ProductBranchStockResult =
+  | { ok: true; rows: { branchName: string; quantity: number }[] }
+  | { ok: false; error: string };
+
+export async function getTransferProductStock(productId: string): Promise<ProductBranchStockResult> {
+  const profile = await getProfile();
+  if (!profile) return { ok: false, error: "Sesión no válida." };
+  if (!profile.branchId) return { ok: true, rows: [] };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("product_stock")
+    .select("quantity, branches(name)")
+    .eq("product_id", productId)
+    .neq("branch_id", profile.branchId);
+
+  if (error) {
+    console.error("getTransferProductStock:", error.message);
+    return { ok: false, error: "No se pudo cargar el stock por sucursal." };
+  }
+
+  const rows = ((data ?? []) as unknown as { quantity: number; branches: { name: string } | null }[]).map(
+    (r) => ({ branchName: r.branches?.name ?? "—", quantity: r.quantity }),
+  );
+  return { ok: true, rows };
 }
