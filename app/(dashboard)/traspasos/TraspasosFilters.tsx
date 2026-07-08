@@ -5,31 +5,11 @@ import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { fieldInputClass } from "@/components/ui/Field";
 
-// Mismo patrón que app/(dashboard)/almacen/AlmacenFilters.tsx, con filtro de
-// sucursal de origen adicional (acá el origen no está fijo en el almacén).
 const DEBOUNCE_MS = 300;
 
-type Branch = { id: string; name: string };
-type Brand = { id: string; name: string };
-
-type FilterValues = {
-  code: string;
-  application: string;
-  brandId: string;
-  branchId: string;
-};
-
-export function TraspasosFilters({
-  branches,
-  brands,
-  initial,
-}: {
-  branches: Branch[];
-  brands: Brand[];
-  initial: FilterValues;
-}) {
+export function TraspasosFilters({ initialCode }: { initialCode: string }) {
   const router = useRouter();
-  const [values, setValues] = useState(initial);
+  const [code, setCode] = useState(initialCode);
   const [isPending, startTransition] = useTransition();
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -39,83 +19,35 @@ export function TraspasosFilters({
     };
   }, []);
 
-  function scheduleNavigate(next: FilterValues) {
+  function update(value: string) {
+    setCode(value);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       const params = new URLSearchParams();
-      if (next.code) params.set("code", next.code);
-      if (next.application) params.set("application", next.application);
-      if (next.brandId) params.set("brandId", next.brandId);
-      if (next.branchId) params.set("branchId", next.branchId);
-      const qs = params.toString();
+      params.set("tab", "sol_env");
+      if (value) params.set("code", value);
       startTransition(() => {
-        router.replace(qs ? `/traspasos?${qs}` : "/traspasos", { scroll: false });
+        router.replace(`/traspasos?${params.toString()}`, { scroll: false });
       });
     }, DEBOUNCE_MS);
   }
 
-  function update<K extends keyof FilterValues>(key: K, value: string) {
-    const next = { ...values, [key]: value };
-    setValues(next);
-    scheduleNavigate(next);
-  }
-
   return (
     <Card className="p-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-600">Código</span>
-          <input
-            type="text"
-            value={values.code}
-            onChange={(e) => update("code", e.target.value)}
-            className={fieldInputClass}
-            autoFocus
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-600">Aplicación</span>
-          <input
-            type="text"
-            value={values.application}
-            onChange={(e) => update("application", e.target.value)}
-            className={fieldInputClass}
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-600">Marca</span>
-          <select
-            value={values.brandId}
-            onChange={(e) => update("brandId", e.target.value)}
-            className={fieldInputClass}
-          >
-            <option value="">Todas</option>
-            {brands.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-600">Sucursal origen</span>
-          <select
-            value={values.branchId}
-            onChange={(e) => update("branchId", e.target.value)}
-            className={fieldInputClass}
-          >
-            <option value="">Todas</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="pb-2 text-xs text-slate-400" aria-live="polite">
-          {isPending ? "Buscando…" : ""}
-        </span>
-      </div>
+      <label className="block text-sm">
+        <span className="mb-1 block text-slate-600">Código de producto</span>
+        <input
+          type="text"
+          value={code}
+          onChange={(e) => update(e.target.value)}
+          className={fieldInputClass}
+          autoFocus
+          autoComplete="off"
+        />
+      </label>
+      <span className="mt-1 block text-xs text-slate-400" aria-live="polite">
+        {isPending ? "Buscando…" : ""}
+      </span>
     </Card>
   );
 }
