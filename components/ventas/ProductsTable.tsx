@@ -51,7 +51,7 @@ export function ProductsTable({
   onSearchEquivalents,
   page,
   totalPages,
-  buildPageHref,
+  baseQuery,
 }: {
   products: ProductResult[];
   selectedProductId: string | null;
@@ -62,9 +62,18 @@ export function ProductsTable({
   onSearchEquivalents: (product: ProductResult) => void;
   page: number;
   totalPages: number;
-  buildPageHref: (page: number) => string;
+  baseQuery: string;
 }) {
   const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
+
+  // El link de cada página se arma aquí (cliente) a partir del querystring de
+  // filtros activos que llega serializado desde el servidor, porque una
+  // función no puede cruzar la frontera Server → Client Component.
+  function buildPageHref(targetPage: number): string {
+    const params = new URLSearchParams(baseQuery);
+    params.set("page", String(targetPage));
+    return `/ventas?${params.toString()}`;
+  }
 
   return (
     <Card className="overflow-auto">

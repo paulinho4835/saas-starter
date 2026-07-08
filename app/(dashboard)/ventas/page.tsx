@@ -171,19 +171,20 @@ export default async function VentasPage({
     stopMm: r.stop_mm,
   }));
 
-  function buildHref(targetPage: number): string {
-    const params = new URLSearchParams();
-    if (sp.code) params.set("code", sp.code);
-    if (sp.application) params.set("application", sp.application);
-    if (sp.brandId) params.set("brandId", sp.brandId);
-    if (sp.mi) params.set("mi", sp.mi);
-    if (sp.me) params.set("me", sp.me);
-    if (sp.alt) params.set("alt", sp.alt);
-    if (sp.pest) params.set("pest", sp.pest);
-    if (sp.tope) params.set("tope", sp.tope);
-    params.set("page", String(targetPage));
-    return `/ventas?${params.toString()}`;
-  }
+  // Filtros activos serializados (sin `page`). Se pasan como string a
+  // SalePanel — un Client Component no puede recibir una función desde el
+  // servidor, así que el link de cada página se arma en el cliente a partir
+  // de este querystring base.
+  const baseParams = new URLSearchParams();
+  if (sp.code) baseParams.set("code", sp.code);
+  if (sp.application) baseParams.set("application", sp.application);
+  if (sp.brandId) baseParams.set("brandId", sp.brandId);
+  if (sp.mi) baseParams.set("mi", sp.mi);
+  if (sp.me) baseParams.set("me", sp.me);
+  if (sp.alt) baseParams.set("alt", sp.alt);
+  if (sp.pest) baseParams.set("pest", sp.pest);
+  if (sp.tope) baseParams.set("tope", sp.tope);
+  const baseQuery = baseParams.toString();
 
   return (
     <div className="space-y-6">
@@ -215,7 +216,7 @@ export default async function VentasPage({
           }
           page={page}
           totalPages={totalPages}
-          buildPageHref={buildHref}
+          baseQuery={baseQuery}
           exchangeRate={exchangeRate}
           canEditExchangeRate={can(profile.role, "settings:write")}
         />

@@ -36,7 +36,7 @@ export function SalePanel({
   filters,
   page,
   totalPages,
-  buildPageHref,
+  baseQuery,
   exchangeRate,
   canEditExchangeRate,
 }: {
@@ -44,7 +44,7 @@ export function SalePanel({
   filters: React.ReactNode;
   page: number;
   totalPages: number;
-  buildPageHref: (page: number) => string;
+  baseQuery: string;
   exchangeRate: number;
   canEditExchangeRate: boolean;
 }) {
@@ -237,7 +237,7 @@ export function SalePanel({
             onSearchEquivalents={searchEquivalents}
             page={page}
             totalPages={totalPages}
-            buildPageHref={buildPageHref}
+            baseQuery={baseQuery}
           />
         </div>
 
