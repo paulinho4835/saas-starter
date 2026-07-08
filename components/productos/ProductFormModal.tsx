@@ -28,6 +28,7 @@ type ProductDetail = {
   flange_mm: number | null;
   stop_mm: number | null;
   application: string | null;
+  notes: string | null;
   cost_usd: number | null;
   margin_sf_pct: number | null;
   margin_cf_pct: number | null;
@@ -205,6 +206,17 @@ export function ProductFormModal({
               name="application"
               rows={2}
               defaultValue={product?.application ?? ""}
+              className={fieldInputClass}
+            />
+          </label>
+
+          <label className="block text-sm">
+            <FieldLabel>Notas</FieldLabel>
+            <textarea
+              name="notes"
+              rows={2}
+              defaultValue={product?.notes ?? ""}
+              placeholder="Ej. En almacén hay 2 docenas"
               className={fieldInputClass}
             />
           </label>

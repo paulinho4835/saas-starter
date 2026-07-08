@@ -46,6 +46,7 @@ type ProductRow = {
   flange_mm: number | null;
   stop_mm: number | null;
   application: string | null;
+  notes: string | null;
   cost_usd: number | null;
   margin_sf_pct: number | null;
   margin_cf_pct: number | null;
@@ -59,7 +60,7 @@ type ProductRow = {
 };
 
 const PRODUCT_SELECT =
-  "id, code, brand_id, family_id, origin_id, supplier_id, internal_mm, external_mm, height_mm, flange_mm, stop_mm, application, cost_usd, margin_sf_pct, margin_cf_pct, margin_may_pct, price_sf_bs, price_cf_bs, price_may_bs, product_brands(name), product_families(name), product_origins(name)";
+  "id, code, brand_id, family_id, origin_id, supplier_id, internal_mm, external_mm, height_mm, flange_mm, stop_mm, application, notes, cost_usd, margin_sf_pct, margin_cf_pct, margin_may_pct, price_sf_bs, price_cf_bs, price_may_bs, product_brands(name), product_families(name), product_origins(name)";
 
 function fmt(value: number | null): string {
   if (value === null) return "—";
