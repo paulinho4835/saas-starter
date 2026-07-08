@@ -1,14 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card } from "@/components/ui/Card";
-import { fieldInputClass } from "@/components/ui/Field";
-
-// Filtro dinámico: cada tecleo actualiza la URL (debounced) y Next.js
-// vuelve a pedir la página del servidor con los nuevos searchParams — sin
-// recarga completa, así la búsqueda "aparece sola" mientras se escribe.
-const DEBOUNCE_MS = 300;
+import { Button, ButtonLink } from "@/components/ui/Button";
+import { FieldLabel, fieldInputClass } from "@/components/ui/Field";
 
 type Brand = { id: string; name: string };
 
@@ -32,134 +27,116 @@ export function VentasFilters({
 }) {
   const router = useRouter();
   const [values, setValues] = useState(initial);
-  const [isPending, startTransition] = useTransition();
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, []);
-
-  function scheduleNavigate(next: FilterValues) {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => {
-      const params = new URLSearchParams();
-      if (next.code) params.set("code", next.code);
-      if (next.application) params.set("application", next.application);
-      if (next.brandId) params.set("brandId", next.brandId);
-      if (next.mi) params.set("mi", next.mi);
-      if (next.me) params.set("me", next.me);
-      if (next.alt) params.set("alt", next.alt);
-      if (next.pest) params.set("pest", next.pest);
-      if (next.tope) params.set("tope", next.tope);
-      const qs = params.toString();
-      startTransition(() => {
-        router.replace(qs ? `/ventas?${qs}` : "/ventas", { scroll: false });
-      });
-    }, DEBOUNCE_MS);
-  }
 
   function update<K extends keyof FilterValues>(key: K, value: string) {
-    const next = { ...values, [key]: value };
-    setValues(next);
-    scheduleNavigate(next);
+    setValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function onFiltrar() {
+    const params = new URLSearchParams();
+    if (values.code) params.set("code", values.code);
+    if (values.application) params.set("application", values.application);
+    if (values.brandId) params.set("brandId", values.brandId);
+    if (values.mi) params.set("mi", values.mi);
+    if (values.me) params.set("me", values.me);
+    if (values.alt) params.set("alt", values.alt);
+    if (values.pest) params.set("pest", values.pest);
+    if (values.tope) params.set("tope", values.tope);
+    const qs = params.toString();
+    router.push(qs ? `/ventas?${qs}` : "/ventas");
   }
 
   return (
-    <Card className="p-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-600">Código</span>
-          <input
-            type="text"
-            value={values.code}
-            onChange={(e) => update("code", e.target.value)}
-            className={fieldInputClass}
-            autoFocus
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-600">Aplicación</span>
-          <input
-            type="text"
-            value={values.application}
-            onChange={(e) => update("application", e.target.value)}
-            className={fieldInputClass}
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-600">Marca</span>
-          <select
-            value={values.brandId}
-            onChange={(e) => update("brandId", e.target.value)}
-            className={fieldInputClass}
-          >
-            <option value="">Todas</option>
-            {brands.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-600">MI</span>
-          <input
-            type="number"
-            step="0.01"
-            value={values.mi}
-            onChange={(e) => update("mi", e.target.value)}
-            className={`${fieldInputClass} w-24`}
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-600">ME</span>
-          <input
-            type="number"
-            step="0.01"
-            value={values.me}
-            onChange={(e) => update("me", e.target.value)}
-            className={`${fieldInputClass} w-24`}
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-600">Altura</span>
-          <input
-            type="number"
-            step="0.01"
-            value={values.alt}
-            onChange={(e) => update("alt", e.target.value)}
-            className={`${fieldInputClass} w-24`}
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-600">Pestaña</span>
-          <input
-            type="number"
-            step="0.01"
-            value={values.pest}
-            onChange={(e) => update("pest", e.target.value)}
-            className={`${fieldInputClass} w-24`}
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-600">Tope</span>
-          <input
-            type="number"
-            step="0.01"
-            value={values.tope}
-            onChange={(e) => update("tope", e.target.value)}
-            className={`${fieldInputClass} w-24`}
-          />
-        </label>
-        <span
-          className="pb-2 text-xs text-slate-400"
-          aria-live="polite"
+    <div className="grid grid-cols-2 gap-3">
+      <label className="block text-sm">
+        <FieldLabel>Aplicación</FieldLabel>
+        <input
+          type="text"
+          value={values.application}
+          onChange={(e) => update("application", e.target.value)}
+          className={fieldInputClass}
+        />
+      </label>
+      <label className="block text-sm">
+        <FieldLabel>Código</FieldLabel>
+        <input
+          type="text"
+          value={values.code}
+          onChange={(e) => update("code", e.target.value)}
+          className={fieldInputClass}
+        />
+      </label>
+      <label className="col-span-2 block text-sm">
+        <FieldLabel>Marca</FieldLabel>
+        <select
+          value={values.brandId}
+          onChange={(e) => update("brandId", e.target.value)}
+          className={fieldInputClass}
         >
-          {isPending ? "Buscando…" : ""}
-        </span>
-      </div>
-    </Card>
+          <option value="">Todas</option>
+          {brands.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block text-sm">
+        <FieldLabel>ME</FieldLabel>
+        <input
+          type="number"
+          step="0.01"
+          value={values.me}
+          onChange={(e) => update("me", e.target.value)}
+          className={fieldInputClass}
+        />
+      </label>
+      <label className="block text-sm">
+        <FieldLabel>MI</FieldLabel>
+        <input
+          type="number"
+          step="0.01"
+          value={values.mi}
+          onChange={(e) => update("mi", e.target.value)}
+          className={fieldInputClass}
+        />
+      </label>
+      <label className="block text-sm">
+        <FieldLabel>Altura</FieldLabel>
+        <input
+          type="number"
+          step="0.01"
+          value={values.alt}
+          onChange={(e) => update("alt", e.target.value)}
+          className={fieldInputClass}
+        />
+      </label>
+      <label className="block text-sm">
+        <FieldLabel>Pestaña</FieldLabel>
+        <input
+          type="number"
+          step="0.01"
+          value={values.pest}
+          onChange={(e) => update("pest", e.target.value)}
+          className={fieldInputClass}
+        />
+      </label>
+      <label className="col-span-2 block text-sm">
+        <FieldLabel>Tope</FieldLabel>
+        <input
+          type="number"
+          step="0.01"
+          value={values.tope}
+          onChange={(e) => update("tope", e.target.value)}
+          className={fieldInputClass}
+        />
+      </label>
+      <Button type="button" className="col-span-1" onClick={onFiltrar}>
+        Filtrar
+      </Button>
+      <ButtonLink variant="secondary" className="col-span-1 text-center" href="/ventas">
+        Limpiar
+      </ButtonLink>
+    </div>
   );
 }
