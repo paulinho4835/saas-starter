@@ -88,6 +88,7 @@ export default async function VentasPage({
   let query = supabase
     .from("products")
     .select(RESULT_SELECT, { count: hasMeasurementFilter ? undefined : "exact" })
+    .eq("active", true)
     .eq("product_stock.branch_id", branchId)
     .order("external_mm", { nullsFirst: false })
     .order("internal_mm", { nullsFirst: false })

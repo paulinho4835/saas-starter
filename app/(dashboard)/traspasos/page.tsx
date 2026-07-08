@@ -180,6 +180,7 @@ export default async function TraspasosPage({
   let query = supabase
     .from("products")
     .select("id, code, application, product_stock!inner(quantity)", { count: "exact" })
+    .eq("active", true)
     .eq("product_stock.branch_id", branchId)
     .order("created_at", { ascending: false });
   if (sp.code) query = query.ilike("code", `%${escapePostgrestFilterValue(sp.code)}%`);
