@@ -120,6 +120,13 @@ export function SalePanel({
   }
 
   function changeSaleType(next: SaleType) {
+    if (cart.length > 0) {
+      const err = tierMismatchError(saleType, priceTierForSaleType(next));
+      if (err) {
+        toast(err, "error");
+        return;
+      }
+    }
     setSaleType(next);
   }
 
