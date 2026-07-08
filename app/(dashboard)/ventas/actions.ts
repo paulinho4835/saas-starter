@@ -238,3 +238,36 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
   revalidatePath("/ventas");
   return { ok: true, saleId: sale.id, total };
 }
+
+// ── Stock por sucursal (panel derecho de Ventas) ────────────────────────────
+export type ProductBranchStockResult =
+  | { ok: true; rows: { branchName: string; quantity: number }[]; notes: string | null }
+  | { ok: false; error: string };
+
+export async function getProductBranchStock(
+  productId: string,
+): Promise<ProductBranchStockResult> {
+  const profile = await getProfile();
+  if (!profile) return { ok: false, error: "Sesión no válida." };
+
+  const supabase = await createClient();
+
+  const [{ data: stockData, error: stockError }, { data: productData }] = await Promise.all([
+    supabase
+      .from("product_stock")
+      .select("quantity, branches(name)")
+      .eq("product_id", productId),
+    supabase.from("products").select("notes").eq("id", productId).maybeSingle(),
+  ]);
+
+  if (stockError) {
+    console.error("getProductBranchStock:", stockError.message);
+    return { ok: false, error: "No se pudo cargar el stock por sucursal." };
+  }
+
+  const rows = ((stockData ?? []) as unknown as { quantity: number; branches: { name: string } | null }[]).map(
+    (r) => ({ branchName: r.branches?.name ?? "—", quantity: r.quantity }),
+  );
+
+  return { ok: true, rows, notes: productData?.notes ?? null };
+}
