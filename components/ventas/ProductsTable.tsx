@@ -1,10 +1,9 @@
 "use client";
 
 import { Pin } from "lucide-react";
-import { ButtonLink, Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ScrollHint } from "@/components/ui/ScrollHint";
-import type { PriceTier } from "@/lib/ventasCart";
+import { pageWindow, type PriceTier } from "@/lib/ventasCart";
 
 export type ProductResult = {
   id: string;
@@ -64,7 +63,7 @@ export function ProductsTable({
   totalPages: number;
   baseQuery: string;
 }) {
-  const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
+  const pageItems = pageWindow(page, totalPages);
 
   // El link de cada página se arma aquí (cliente) a partir del querystring de
   // filtros activos que llega serializado desde el servidor, porque una
@@ -74,6 +73,11 @@ export function ProductsTable({
     params.set("page", String(targetPage));
     return `/ventas?${params.toString()}`;
   }
+
+  const arrowClass =
+    "flex h-9 min-w-9 items-center justify-center rounded-lg border border-slate-200 px-3 text-slate-600 transition hover:border-slate-300 hover:bg-slate-50";
+  const arrowDisabledClass =
+    "flex h-9 min-w-9 cursor-not-allowed items-center justify-center rounded-lg border border-slate-100 px-3 text-slate-300";
 
   return (
     <Card className="overflow-auto">
@@ -178,36 +182,58 @@ export function ProductsTable({
       </table>
 
       {totalPages > 1 && (
-        <div className="flex flex-wrap items-center justify-center gap-1 border-t border-slate-100 p-3 text-sm">
+        <nav
+          aria-label="Paginación"
+          className="flex flex-wrap items-center justify-center gap-1.5 border-t border-slate-100 p-3 text-sm"
+        >
           {page > 1 ? (
-            <ButtonLink variant="secondary" size="sm" href={buildPageHref(page - 1)}>
+            <a href={buildPageHref(page - 1)} className={arrowClass} aria-label="Página anterior">
               ‹
-            </ButtonLink>
+            </a>
           ) : (
-            <Button variant="secondary" size="sm" disabled>
+            <span className={arrowDisabledClass} aria-hidden="true">
               ‹
-            </Button>
+            </span>
           )}
-          {pageNumbers.map((n) => (
-            <ButtonLink
-              key={n}
-              variant={n === page ? "primary" : "secondary"}
-              size="sm"
-              href={buildPageHref(n)}
-            >
-              {n}
-            </ButtonLink>
-          ))}
+
+          {pageItems.map((item, i) =>
+            item === "…" ? (
+              <span
+                key={`gap-${i}`}
+                className="flex h-9 w-9 items-center justify-center text-slate-400"
+                aria-hidden="true"
+              >
+                …
+              </span>
+            ) : item === page ? (
+              <span
+                key={item}
+                aria-current="page"
+                className="flex h-9 min-w-9 items-center justify-center rounded-lg bg-brand-600 px-3 font-semibold text-white"
+              >
+                {item}
+              </span>
+            ) : (
+              <a
+                key={item}
+                href={buildPageHref(item)}
+                className="flex h-9 min-w-9 items-center justify-center rounded-lg border border-slate-200 px-3 text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                {item}
+              </a>
+            ),
+          )}
+
           {page < totalPages ? (
-            <ButtonLink variant="secondary" size="sm" href={buildPageHref(page + 1)}>
+            <a href={buildPageHref(page + 1)} className={arrowClass} aria-label="Página siguiente">
               ›
-            </ButtonLink>
+            </a>
           ) : (
-            <Button variant="secondary" size="sm" disabled>
+            <span className={arrowDisabledClass} aria-hidden="true">
               ›
-            </Button>
+            </span>
           )}
-        </div>
+        </nav>
       )}
     </Card>
   );

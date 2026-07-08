@@ -1,6 +1,6 @@
 // lib/ventasCart.test.ts
 import { describe, expect, it } from "vitest";
-import { tierMismatchError, clampPage, isValidCartQuantity, isValidCartPrice } from "./ventasCart";
+import { tierMismatchError, clampPage, pageWindow, isValidCartQuantity, isValidCartPrice } from "./ventasCart";
 
 describe("tierMismatchError", () => {
   it("returns null when the new tier matches the current sale type's tier", () => {
@@ -43,6 +43,36 @@ describe("clampPage", () => {
 
   it("floors a non-integer page", () => {
     expect(clampPage(2.7, 5)).toBe(2);
+  });
+});
+
+describe("pageWindow", () => {
+  it("lists every page when they all fit without gaps", () => {
+    expect(pageWindow(1, 5)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("inserts an ellipsis on both sides for a middle page in a large set", () => {
+    expect(pageWindow(10, 372)).toEqual([1, "…", 8, 9, 10, 11, 12, "…", 372]);
+  });
+
+  it("omits the left ellipsis near the start", () => {
+    expect(pageWindow(2, 372)).toEqual([1, 2, 3, 4, "…", 372]);
+  });
+
+  it("omits the right ellipsis near the end", () => {
+    expect(pageWindow(371, 372)).toEqual([1, "…", 369, 370, 371, 372]);
+  });
+
+  it("does not use an ellipsis for a single skipped page (shows the number)", () => {
+    expect(pageWindow(4, 6)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("clamps an out-of-range page before building the window", () => {
+    expect(pageWindow(999, 5)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("returns [1] when there are no pages", () => {
+    expect(pageWindow(1, 0)).toEqual([1]);
   });
 });
 

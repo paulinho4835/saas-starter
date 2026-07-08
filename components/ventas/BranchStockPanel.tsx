@@ -8,13 +8,11 @@ import type { ProductResult } from "@/components/ventas/ProductsTable";
 
 export function BranchStockPanel({ product }: { product: ProductResult | null }) {
   const [rows, setRows] = useState<{ branchName: string; quantity: number }[]>([]);
-  const [notes, setNotes] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!product) {
       setRows([]);
-      setNotes(null);
       setError(null);
       return;
     }
@@ -24,12 +22,10 @@ export function BranchStockPanel({ product }: { product: ProductResult | null })
       if (!res.ok) {
         setError(res.error);
         setRows([]);
-        setNotes(null);
         return;
       }
       setError(null);
       setRows(res.rows);
-      setNotes(res.notes);
     });
     return () => {
       cancelled = true;
@@ -65,7 +61,8 @@ export function BranchStockPanel({ product }: { product: ProductResult | null })
         <textarea
           disabled
           rows={4}
-          value={notes ?? ""}
+          value={product?.application ?? ""}
+          placeholder={product ? "Este producto no tiene aplicación registrada." : "Selecciona un producto."}
           className={fieldInputClass}
         />
       </label>
