@@ -27,6 +27,8 @@ type MovementRow = {
   quantity_delta: number;
   resulting_quantity: number;
   sale_id: string | null;
+  legacy_amount_bs: number | null;
+  legacy_price_tier: "sf" | "cf" | "may" | null;
   created_at: string;
   products: { id: string; code: string } | null;
   branches: { name: string } | null;
@@ -34,7 +36,7 @@ type MovementRow = {
 };
 
 const MOVEMENT_SELECT =
-  "id, movement_type, quantity_delta, resulting_quantity, sale_id, created_at, products!inner(id, code), branches!inner(name), profiles(full_name)";
+  "id, movement_type, quantity_delta, resulting_quantity, sale_id, legacy_amount_bs, legacy_price_tier, created_at, products!inner(id, code), branches!inner(name), profiles(full_name)";
 
 // Fila ya "pivotada" como en el sistema anterior: el monto de venta/devolución
 // va bajo la columna de su tipo, en vez de una columna genérica de precio.
@@ -122,8 +124,15 @@ export default async function MovimientosProductoPage({
         if (saleItem.priceTier === "cf") compraCf = saleItem.subtotalBs;
         else if (saleItem.priceTier === "sf") compraSf = saleItem.subtotalBs;
         else compraMay = saleItem.subtotalBs;
+      } else if (m.movement_type === "venta" && m.legacy_price_tier && m.legacy_amount_bs !== null) {
+        // Venta migrada del histórico legacy: no tiene sale_id (el legacy no
+        // guardaba esa relación), así que el monto viene inline en vez de
+        // por join con sale_items.
+        if (m.legacy_price_tier === "cf") compraCf = m.legacy_amount_bs;
+        else if (m.legacy_price_tier === "sf") compraSf = m.legacy_amount_bs;
+        else compraMay = m.legacy_amount_bs;
       } else if (m.movement_type === "devolucion") {
-        devolucion = returnAmount ?? null;
+        devolucion = returnAmount ?? m.legacy_amount_bs ?? null;
       } else {
         ajusteInventario = m.quantity_delta;
       }

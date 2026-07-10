@@ -264,6 +264,61 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
   return { ok: true, saleIds: createdSaleIds, total: Math.round(total * 100) / 100 };
 }
 
+// Busca un cliente ya registrado por NIT exacto (case-insensitive), para
+// autocompletar el nombre en el modal de venta con factura apenas el
+// vendedor termina de escribir el NIT — igual que el legacy, que ya tenía
+// el cliente guardado de una venta anterior.
+export async function lookupCustomerByNit(
+  nit: string,
+): Promise<{ ok: true; fullName: string | null } | { ok: false; error: string }> {
+  const profile = await getProfile();
+  if (!profile) return { ok: false, error: "Sesión no válida." };
+  const trimmed = nit.trim();
+  if (!trimmed) return { ok: true, fullName: null };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("customers")
+    .select("full_name")
+    .eq("org_id", profile.orgId)
+    .ilike("nit", trimmed)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error("lookupCustomerByNit:", error.message);
+    return { ok: false, error: "No se pudo buscar el cliente." };
+  }
+  return { ok: true, fullName: data?.full_name ?? null };
+}
+
+// Inverso de lookupCustomerByNit: busca por nombre exacto (case-insensitive)
+// para autocompletar el NIT. Si hay más de un cliente con el mismo nombre
+// (nombres genéricos como "Mostrador"), toma el primero — es solo un
+// autocompletado, el vendedor puede corregirlo a mano.
+export async function lookupCustomerByName(
+  fullName: string,
+): Promise<{ ok: true; nit: string | null } | { ok: false; error: string }> {
+  const profile = await getProfile();
+  if (!profile) return { ok: false, error: "Sesión no válida." };
+  const trimmed = fullName.trim();
+  if (!trimmed) return { ok: true, nit: null };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("customers")
+    .select("nit")
+    .eq("org_id", profile.orgId)
+    .ilike("full_name", trimmed)
+    .not("nit", "is", null)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error("lookupCustomerByName:", error.message);
+    return { ok: false, error: "No se pudo buscar el cliente." };
+  }
+  return { ok: true, nit: data?.nit ?? null };
+}
+
 // ── Stock por sucursal (panel derecho de Ventas) ────────────────────────────
 // El legacy solo muestra el stock de OTRAS sucursales acá (el stock de la
 // sucursal propia ya se ve en la columna "Stock" de la tabla principal).

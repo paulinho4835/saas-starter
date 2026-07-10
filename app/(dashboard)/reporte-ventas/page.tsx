@@ -184,7 +184,7 @@ export default async function ReporteVentasPage({
                     <td className="px-3 py-2 text-slate-500">
                       {SALE_TYPE_LABEL[row.sales!.sale_type as SaleType]}
                     </td>
-                    <td className="px-3 py-2">{row.sales!.customers?.full_name ?? "Mostrador"}</td>
+                    <td className="px-3 py-2">{row.sales!.customers?.full_name ?? ""}</td>
                     <td className="px-3 py-2 text-slate-500">{row.sales!.customers?.nit ?? "—"}</td>
                     <td className="px-3 py-2 font-medium text-slate-800">{row.products?.code ?? "—"}</td>
                     <td className="px-3 py-2">{row.unit_price_bs}</td>
