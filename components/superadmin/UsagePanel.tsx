@@ -43,24 +43,30 @@ function UsageBar({
   );
 }
 
-export function UsagePanel({ usage }: { usage: PlatformUsage }) {
+export function UsagePanel({ usage }: { usage: PlatformUsage | null }) {
   return (
     <Card className="space-y-4 p-4">
       <h2 className="text-sm font-semibold text-slate-800">
         Uso de Supabase (plan Free)
       </h2>
-      <div className="grid gap-4 md:grid-cols-2">
-        <UsageBar
-          label="Base de datos"
-          used={usage.dbBytes}
-          limit={usage.dbLimitBytes}
-        />
-        <UsageBar
-          label="Storage"
-          used={usage.storageBytes}
-          limit={usage.storageLimitBytes}
-        />
-      </div>
+      {usage === null ? (
+        <p className="text-sm text-slate-500">
+          No se pudo cargar el uso de la plataforma.
+        </p>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          <UsageBar
+            label="Base de datos"
+            used={usage.dbBytes}
+            limit={usage.dbLimitBytes}
+          />
+          <UsageBar
+            label="Storage"
+            used={usage.storageBytes}
+            limit={usage.storageLimitBytes}
+          />
+        </div>
+      )}
     </Card>
   );
 }

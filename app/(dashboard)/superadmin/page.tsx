@@ -14,9 +14,15 @@ export default async function SuperadminPage() {
   if (!(await isPlatformAdmin())) redirect("/dashboard");
 
   const admin = createAdminClient();
-  const [{ data }, usage] = await Promise.all([
+  const [{ data }, usageResult] = await Promise.all([
     admin.from("organizations").select("id, name, active, features").order("name"),
-    getPlatformUsage(admin),
+    getPlatformUsage(admin).then(
+      (usage) => ({ ok: true as const, usage }),
+      (error: unknown) => {
+        console.error("No se pudo obtener el uso de la plataforma:", error);
+        return { ok: false as const };
+      },
+    ),
   ]);
   const orgs = (data ?? []) as OrgRow[];
 
@@ -28,7 +34,7 @@ export default async function SuperadminPage() {
         action={<NewOrgForm />}
       />
 
-      <UsagePanel usage={usage} />
+      <UsagePanel usage={usageResult.ok ? usageResult.usage : null} />
 
       {orgs.length === 0 ? (
         <EmptyState
