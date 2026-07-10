@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getProfile } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { createClient } from "@/lib/supabase/server";
+import { escapePostgrestFilterValue } from "@/lib/postgrest";
 import { calculateLineSubtotal, calculateSaleTotal } from "@/lib/sales";
 import { SALE_TYPES, priceTierForSaleType, type SaleType } from "@/lib/saleType";
 
@@ -289,6 +290,37 @@ export async function lookupCustomerByNit(
     return { ok: false, error: "No se pudo buscar el cliente." };
   }
   return { ok: true, fullName: data?.full_name ?? null };
+}
+
+// Sugerencias mientras el vendedor escribe el NIT (réplica del autocompletado
+// del legacy: lista de clientes cuyo NIT empieza con lo tecleado, para elegir
+// de una lista en vez de tener que escribir el NIT completo).
+export type CustomerNitSuggestion = { nit: string; fullName: string };
+export async function searchCustomersByNit(
+  prefix: string,
+): Promise<{ ok: true; results: CustomerNitSuggestion[] } | { ok: false; error: string }> {
+  const profile = await getProfile();
+  if (!profile) return { ok: false, error: "Sesión no válida." };
+  const trimmed = prefix.trim();
+  if (!trimmed) return { ok: true, results: [] };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("customers")
+    .select("nit, full_name")
+    .eq("org_id", profile.orgId)
+    .not("nit", "is", null)
+    .ilike("nit", `${escapePostgrestFilterValue(trimmed)}%`)
+    .order("nit")
+    .limit(8);
+  if (error) {
+    console.error("searchCustomersByNit:", error.message);
+    return { ok: false, error: "No se pudo buscar el cliente." };
+  }
+  return {
+    ok: true,
+    results: (data ?? []).map((c) => ({ nit: c.nit as string, fullName: c.full_name })),
+  };
 }
 
 // Inverso de lookupCustomerByNit: busca por nombre exacto (case-insensitive)

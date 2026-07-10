@@ -4,7 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
-import { lookupCustomerByNit, lookupCustomerByName } from "@/app/(dashboard)/ventas/actions";
+import {
+  lookupCustomerByNit,
+  lookupCustomerByName,
+  searchCustomersByNit,
+  type CustomerNitSuggestion,
+} from "@/app/(dashboard)/ventas/actions";
 
 // Replica modal_formulario_cliente.blade.php del legacy: cuando la venta
 // incluye líneas "con factura" (CF), no se vende directo — se pide NIT y
@@ -32,8 +37,11 @@ export function SaleInvoiceModal({
   const [fecha, setFecha] = useState("");
   const [nombreCliente, setNombreCliente] = useState("");
   const [nitCliente, setNitCliente] = useState("");
+  const [suggestions, setSuggestions] = useState<CustomerNitSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const nitLookupTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nameLookupTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suggestLookupTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Qué campo escribió el vendedor por última vez, para saber cuál de los
   // dos autocompletados debe correr (si dejamos que ambos corran siempre,
   // el autocompletado de uno dispara al otro y viceversa, ping-pong infinito).
@@ -46,6 +54,8 @@ export function SaleInvoiceModal({
       setFecha(formatFecha(new Date()));
       setNombreCliente("");
       setNitCliente("");
+      setSuggestions([]);
+      setShowSuggestions(false);
       lastEdited.current = null;
     }
   }, [open]);
@@ -66,6 +76,37 @@ export function SaleInvoiceModal({
       if (nitLookupTimeout.current) clearTimeout(nitLookupTimeout.current);
     };
   }, [nitCliente]);
+
+  // Lista de clientes cuyo NIT empieza con lo tecleado, para elegir de un
+  // dropdown en vez de escribir el NIT completo (igual que el legacy).
+  useEffect(() => {
+    if (suggestLookupTimeout.current) clearTimeout(suggestLookupTimeout.current);
+    if (lastEdited.current !== "nit") return;
+    const nit = nitCliente.trim();
+    if (!nit) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    suggestLookupTimeout.current = setTimeout(async () => {
+      const res = await searchCustomersByNit(nit);
+      if (res.ok) {
+        setSuggestions(res.results);
+        setShowSuggestions(res.results.length > 0);
+      }
+    }, 300);
+    return () => {
+      if (suggestLookupTimeout.current) clearTimeout(suggestLookupTimeout.current);
+    };
+  }, [nitCliente]);
+
+  function selectSuggestion(s: CustomerNitSuggestion) {
+    lastEdited.current = null;
+    setNitCliente(s.nit);
+    setNombreCliente(s.fullName);
+    setSuggestions([]);
+    setShowSuggestions(false);
+  }
 
   // Inverso: si escribe un nombre ya registrado, autocompleta el NIT.
   useEffect(() => {
@@ -97,18 +138,39 @@ export function SaleInvoiceModal({
         </label>
         <label className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] items-center gap-3 text-sm">
           <span className="font-medium text-slate-700">NIT del cliente</span>
-          <input
-            type="text"
-            required
-            placeholder="nit"
-            autoComplete="off"
-            value={nitCliente}
-            onChange={(e) => {
-              lastEdited.current = "nit";
-              setNitCliente(e.target.value);
-            }}
-            className={fieldInputClass}
-          />
+          <div className="relative">
+            <input
+              type="text"
+              required
+              placeholder="nit"
+              autoComplete="off"
+              value={nitCliente}
+              onChange={(e) => {
+                lastEdited.current = "nit";
+                setNitCliente(e.target.value);
+              }}
+              onFocus={() => setShowSuggestions(suggestions.length > 0)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+              className={fieldInputClass}
+            />
+            {showSuggestions && (
+              <ul className="absolute z-10 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-slate-200 bg-white text-sm shadow-lg">
+                {suggestions.map((s) => (
+                  <li key={s.nit}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => selectSuggestion(s)}
+                      className="block w-full px-3 py-1.5 text-left hover:bg-slate-100"
+                    >
+                      <span className="font-medium text-slate-700">{s.nit}</span>{" "}
+                      <span className="text-slate-500">{s.fullName}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </label>
         <label className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] items-center gap-3 text-sm">
           <span className="font-medium text-slate-700">Nombre Cliente</span>
