@@ -25,6 +25,26 @@ export async function getPlatformUsage(
     admin.rpc("platform_storage_usage_bytes"),
   ]);
 
+  if (dbResult.error) {
+    console.error(
+      "getPlatformUsage: fallo el RPC platform_db_size_bytes",
+      dbResult.error,
+    );
+    throw new Error(
+      `No se pudo obtener el uso de la plataforma: ${dbResult.error.message}`,
+    );
+  }
+
+  if (storageResult.error) {
+    console.error(
+      "getPlatformUsage: fallo el RPC platform_storage_usage_bytes",
+      storageResult.error,
+    );
+    throw new Error(
+      `No se pudo obtener el uso de la plataforma: ${storageResult.error.message}`,
+    );
+  }
+
   return {
     dbBytes: dbResult.data ?? 0,
     storageBytes: storageResult.data ?? 0,

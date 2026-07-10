@@ -1,14 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 import { getPlatformUsage } from "./platformUsage";
 
-function fakeAdmin(dbBytes: number | null, storageBytes: number | null) {
+function fakeAdmin(
+  dbBytes: number | null,
+  storageBytes: number | null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  dbError: any = null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  storageError: any = null,
+) {
   return {
     rpc: vi.fn((fnName: string) => {
       if (fnName === "platform_db_size_bytes") {
-        return Promise.resolve({ data: dbBytes, error: null });
+        return Promise.resolve({ data: dbBytes, error: dbError });
       }
       if (fnName === "platform_storage_usage_bytes") {
-        return Promise.resolve({ data: storageBytes, error: null });
+        return Promise.resolve({ data: storageBytes, error: storageError });
       }
       throw new Error(`unexpected rpc: ${fnName}`);
     }),
@@ -46,6 +53,14 @@ describe("getPlatformUsage", () => {
     const usage = await getPlatformUsage(admin);
     expect(usage.dbBytes).toBe(0);
     expect(usage.storageBytes).toBe(0);
+    vi.unstubAllEnvs();
+  });
+
+  it("throws when platform_db_size_bytes returns an error instead of silently returning 0", async () => {
+    vi.stubEnv("SUPABASE_FREE_DB_LIMIT_MB", "");
+    vi.stubEnv("SUPABASE_FREE_STORAGE_LIMIT_MB", "");
+    const admin = fakeAdmin(null, 0, { message: "boom" });
+    await expect(getPlatformUsage(admin)).rejects.toThrow();
     vi.unstubAllEnvs();
   });
 });
