@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthUser, getProfile } from "@/lib/auth";
 import { FEATURES, normalizeFeatures } from "@/lib/features";
 import { isPlatformAdmin } from "@/lib/superadmin";
 import { canSeeNav, type Role } from "@/lib/rbac";
-import type { AssignableModuleKey } from "@/lib/features";
 import { Sidebar } from "@/components/Sidebar";
 import { Toaster } from "@/components/ui/toaster";
 import { ConfirmHost } from "@/components/ui/ConfirmHost";
@@ -18,32 +17,25 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select(
-      "full_name, role, active, terms_accepted_at, terms_accepted_version, allowed_modules, organizations(name, features, active)",
-    )
-    .eq("id", user.id)
-    .single();
-
-  const superadmin = await isPlatformAdmin();
+  // getProfile()/isPlatformAdmin() están cacheados por request (React
+  // cache()) y comparten la misma sesión vía getAuthUser(), así que esto no
+  // repite consultas ya hechas por requireNavAccess()/requireFeature() en la
+  // page que se esté renderizando.
+  const [profile, superadmin] = await Promise.all([getProfile(), isPlatformAdmin()]);
 
   // Un superadmin normalmente no tiene perfil. Si lo tiene, está en modo vista
   // previa de una organización.
   const isPreview = superadmin && !!profile;
 
-  const org = profile?.organizations as
-    | { name?: string; features?: unknown; active?: boolean }
-    | null;
+  const org = profile
+    ? { name: profile.orgName, features: profile.orgFeatures, active: profile.orgActive }
+    : null;
 
   // Usuario desactivado: conserva sus datos pero no puede operar.
-  const profileActive = (profile as { active?: boolean } | null)?.active ?? true;
+  const profileActive = profile?.active ?? true;
   if (!superadmin && profile && profileActive === false) {
     return (
       <main className="flex min-h-screen items-center justify-center px-6">
@@ -78,13 +70,8 @@ export default async function DashboardLayout({
   // Aceptación de Términos: el admin la ve en el primer ingreso y cada vez que la
   // versión vigente (LEGAL_VERSION) difiere de la aceptada. No aplica al
   // superadmin ni en vista previa.
-  const termsProfile = profile as {
-    terms_accepted_at?: string | null;
-    terms_accepted_version?: string | null;
-  } | null;
   const termsAccepted =
-    !!termsProfile?.terms_accepted_at &&
-    termsProfile?.terms_accepted_version === LEGAL_VERSION;
+    !!profile?.termsAcceptedAt && profile?.termsAcceptedVersion === LEGAL_VERSION;
   if (!superadmin && profile && profile.role === "admin" && !termsAccepted) {
     return (
       <>
@@ -100,9 +87,7 @@ export default async function DashboardLayout({
   // (si existe) el override de visibilidad del usuario.
   const features = normalizeFeatures(org?.features);
   const role = profile?.role as Role | undefined;
-  const allowedModules =
-    (profile as { allowed_modules?: AssignableModuleKey[] | null } | null)
-      ?.allowed_modules ?? null;
+  const allowedModules = profile?.allowedModules ?? null;
 
   const nav =
     superadmin && !isPreview
@@ -112,7 +97,7 @@ export default async function DashboardLayout({
         ).map((f) => ({ href: f.href, label: f.label }));
 
   const initials =
-    !superadmin && profile?.full_name ? getInitials(profile.full_name) : null;
+    !superadmin && profile?.fullName ? getInitials(profile.fullName) : null;
 
   const ROLE_LABEL: Record<string, string> = {
     admin: "Administrador",
@@ -124,7 +109,7 @@ export default async function DashboardLayout({
     ? "Vista previa"
     : superadmin
     ? "Operador de plataforma"
-    : `${profile?.full_name ?? ""} · ${ROLE_LABEL[profile?.role ?? ""] ?? profile?.role ?? ""}`;
+    : `${profile?.fullName ?? ""} · ${ROLE_LABEL[profile?.role ?? ""] ?? profile?.role ?? ""}`;
 
   const impersonatingOrgName = await getImpersonationOrgName();
 

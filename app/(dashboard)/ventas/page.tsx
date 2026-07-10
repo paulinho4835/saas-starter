@@ -85,41 +85,49 @@ export default async function VentasPage({
   const hasMeasurementFilter = Boolean(sp.mi || sp.me || sp.alt || sp.pest || sp.tope);
   const explicitPage = sp.page ? Math.max(1, Number(sp.page) || 1) : null;
 
-  let query = supabase
-    .from("products")
-    .select(RESULT_SELECT, { count: hasMeasurementFilter ? undefined : "exact" })
-    .eq("active", true)
-    .eq("product_stock.branch_id", branchId)
-    .order("external_mm", { nullsFirst: false })
-    .order("internal_mm", { nullsFirst: false })
-    .order("height_mm", { nullsFirst: false })
-    .order("flange_mm", { nullsFirst: false })
-    .order("stop_mm", { nullsFirst: false })
-    .order("code");
+  // Se reconstruye la query desde cero en cada llamada (en vez de reusar un
+  // único builder) porque necesitamos ejecutarla más de una vez con distinto
+  // .select()/.range() según la rama (con/sin filtro de medida, con/sin
+  // conteo) — los query builders de supabase-js no son reutilizables tras
+  // ejecutarse.
+  function buildQuery(selectClause: string, countOnly: boolean) {
+    let q = supabase
+      .from("products")
+      .select(selectClause, countOnly ? { count: "exact", head: true } : undefined)
+      .eq("active", true)
+      .eq("product_stock.branch_id", branchId)
+      .order("external_mm", { nullsFirst: false })
+      .order("internal_mm", { nullsFirst: false })
+      .order("height_mm", { nullsFirst: false })
+      .order("flange_mm", { nullsFirst: false })
+      .order("stop_mm", { nullsFirst: false })
+      .order("code");
 
-  if (sp.code) query = query.ilike("code", `%${escapePostgrestFilterValue(sp.code)}%`);
-  if (sp.application)
-    query = query.ilike("application", `%${escapePostgrestFilterValue(sp.application)}%`);
-  if (sp.brandId) query = query.eq("brand_id", sp.brandId);
-  if (sp.mi) {
-    const [lo, hi] = toleranceRange(Number(sp.mi));
-    query = query.gte("internal_mm", lo).lte("internal_mm", hi);
-  }
-  if (sp.me) {
-    const [lo, hi] = toleranceRange(Number(sp.me));
-    query = query.gte("external_mm", lo).lte("external_mm", hi);
-  }
-  if (sp.alt) {
-    const [lo, hi] = toleranceRange(Number(sp.alt));
-    query = query.gte("height_mm", lo).lte("height_mm", hi);
-  }
-  if (sp.pest) {
-    const [lo, hi] = toleranceRange(Number(sp.pest));
-    query = query.gte("flange_mm", lo).lte("flange_mm", hi);
-  }
-  if (sp.tope) {
-    const [lo, hi] = toleranceRange(Number(sp.tope));
-    query = query.gte("stop_mm", lo).lte("stop_mm", hi);
+    if (sp.code) q = q.ilike("code", `%${escapePostgrestFilterValue(sp.code)}%`);
+    if (sp.application)
+      q = q.ilike("application", `%${escapePostgrestFilterValue(sp.application)}%`);
+    if (sp.brandId) q = q.eq("brand_id", sp.brandId);
+    if (sp.mi) {
+      const [lo, hi] = toleranceRange(Number(sp.mi));
+      q = q.gte("internal_mm", lo).lte("internal_mm", hi);
+    }
+    if (sp.me) {
+      const [lo, hi] = toleranceRange(Number(sp.me));
+      q = q.gte("external_mm", lo).lte("external_mm", hi);
+    }
+    if (sp.alt) {
+      const [lo, hi] = toleranceRange(Number(sp.alt));
+      q = q.gte("height_mm", lo).lte("height_mm", hi);
+    }
+    if (sp.pest) {
+      const [lo, hi] = toleranceRange(Number(sp.pest));
+      q = q.gte("flange_mm", lo).lte("flange_mm", hi);
+    }
+    if (sp.tope) {
+      const [lo, hi] = toleranceRange(Number(sp.tope));
+      q = q.gte("stop_mm", lo).lte("stop_mm", hi);
+    }
+    return q;
   }
 
   let rows: ProductResultRow[];
@@ -138,7 +146,7 @@ export default async function VentasPage({
     // Con filtro de medida se trae todo el conjunto ya ordenado (acotado a un
     // límite generoso) para poder calcular la página de cercanía exactamente
     // igual que el legacy, y luego se recorta la página a mostrar en JS.
-    const { data } = await query.limit(5000);
+    const { data } = await buildQuery(RESULT_SELECT, false).limit(5000);
     const allRows = (data ?? []) as unknown as ProductResultRow[];
     totalPages = Math.max(1, Math.ceil(allRows.length / PAGE_SIZE));
 
@@ -167,11 +175,20 @@ export default async function VentasPage({
     }
     rows = allRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   } else {
-    const { data, count } = await query.range(0, PAGE_SIZE * 200 - 1);
-    const allRows = (data ?? []) as unknown as ProductResultRow[];
-    totalPages = Math.max(1, Math.ceil((count ?? allRows.length) / PAGE_SIZE));
+    // Sin filtro de medida no hace falta traer todo el catálogo: se pide
+    // solo el conteo (head, sin filas) para saber cuántas páginas hay, y
+    // luego se trae del servidor únicamente la página pedida con .range().
+    // El filtro `product_stock.branch_id` solo restringe filas si el embed
+    // usa !inner (RESULT_SELECT lo incluye) — con head:true no se transfieren
+    // filas, solo el conteo, así que reusar el mismo select no cuesta más.
+    const { count } = await buildQuery(RESULT_SELECT, true);
+    totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
     page = clampPage(explicitPage ?? 1, totalPages);
-    rows = allRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    const { data } = await buildQuery(RESULT_SELECT, false).range(
+      (page - 1) * PAGE_SIZE,
+      page * PAGE_SIZE - 1,
+    );
+    rows = (data ?? []) as unknown as ProductResultRow[];
   }
 
   const products = rows.map((r) => ({

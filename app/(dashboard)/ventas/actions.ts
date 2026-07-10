@@ -89,42 +89,53 @@ export async function createSale(formData: FormData): Promise<CreateSaleResult> 
     };
   }
 
-  // 2) Descontar stock línea por línea con bloqueo optimista. Si una línea
-  // falla, revierte las que ya se aplicaron.
+  // 2) Descontar stock con bloqueo optimista. Cada línea es un producto
+  // distinto (el carrito no permite repetir producto, ver
+  // isProductInCart/PRODUCT_ALREADY_IN_CART_ERROR en lib/ventasCart.ts), así
+  // que los updates son independientes entre sí y se disparan todos en
+  // paralelo en vez de uno por uno — con carritos grandes esto evita que la
+  // confirmación de venta escale linealmente con la cantidad de líneas.
   const decremented: { productId: string; quantity: number }[] = [];
 
   async function revertDecrements() {
-    for (const d of decremented) {
-      const original = stockByProduct.get(d.productId) ?? 0;
-      await supabase
-        .from("product_stock")
-        .update({ quantity: original })
-        .eq("product_id", d.productId)
-        .eq("branch_id", branchId);
-    }
+    await Promise.all(
+      decremented.map((d) => {
+        const original = stockByProduct.get(d.productId) ?? 0;
+        return supabase
+          .from("product_stock")
+          .update({ quantity: original })
+          .eq("product_id", d.productId)
+          .eq("branch_id", branchId);
+      }),
+    );
   }
 
-  for (const item of parsed.data.items) {
-    const currentQuantity = stockByProduct.get(item.productId)!;
-    const { data: updated } = await supabase
-      .from("product_stock")
-      .update({
-        quantity: currentQuantity - item.quantity,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("product_id", item.productId)
-      .eq("branch_id", branchId)
-      .eq("quantity", currentQuantity)
-      .select("quantity")
-      .maybeSingle();
-    if (!updated) {
-      await revertDecrements();
-      return {
-        ok: false,
-        error: "El stock cambió mientras confirmabas la venta. Vuelve a intentarlo.",
-      };
-    }
-    decremented.push({ productId: item.productId, quantity: item.quantity });
+  const decrementResults = await Promise.all(
+    parsed.data.items.map(async (item) => {
+      const currentQuantity = stockByProduct.get(item.productId)!;
+      const { data: updated } = await supabase
+        .from("product_stock")
+        .update({
+          quantity: currentQuantity - item.quantity,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("product_id", item.productId)
+        .eq("branch_id", branchId)
+        .eq("quantity", currentQuantity)
+        .select("quantity")
+        .maybeSingle();
+      return { item, ok: Boolean(updated) };
+    }),
+  );
+  for (const { item, ok } of decrementResults) {
+    if (ok) decremented.push({ productId: item.productId, quantity: item.quantity });
+  }
+  if (decrementResults.some((r) => !r.ok)) {
+    await revertDecrements();
+    return {
+      ok: false,
+      error: "El stock cambió mientras confirmabas la venta. Vuelve a intentarlo.",
+    };
   }
 
   // 3) Resuelve el cliente por NIT (dedup) o crea uno nuevo según lo que haya
