@@ -33,11 +33,12 @@ type SaleItemRow = {
     sale_type: string;
     branches: { name: string } | null;
     customers: { full_name: string; nit: string | null } | null;
+    seller: { full_name: string } | null;
   } | null;
 };
 
 const SALE_ITEM_SELECT =
-  "id, unit_price_bs, quantity, subtotal_bs, products(code), sales!inner(created_at, sale_type, branch_id, branches(name), customers(full_name, nit))";
+  "id, unit_price_bs, quantity, subtotal_bs, products(code), sales!inner(created_at, sale_type, branch_id, branches(name), customers(full_name, nit), seller:profiles(full_name))";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -166,6 +167,7 @@ export default async function ReporteVentasPage({
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-3 py-2">Fecha</th>
+                  <th className="px-3 py-2">Usuario</th>
                   <th className="px-3 py-2">Sucursal</th>
                   <th className="px-3 py-2">Tipo de venta</th>
                   <th className="px-3 py-2">Cliente</th>
@@ -180,6 +182,7 @@ export default async function ReporteVentasPage({
                 {rows.map((row) => (
                   <tr key={row.id} className="border-b border-slate-100">
                     <td className="px-3 py-2 text-slate-500">{formatDateTime(row.sales!.created_at)}</td>
+                    <td className="px-3 py-2">{row.sales!.seller?.full_name ?? "—"}</td>
                     <td className="px-3 py-2">{row.sales!.branches?.name ?? "—"}</td>
                     <td className="px-3 py-2 text-slate-500">
                       {SALE_TYPE_LABEL[row.sales!.sale_type as SaleType]}

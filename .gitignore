@@ -40,6 +40,6 @@ supabase/.temp
 # migración legacy: contienen UUIDs reales / contraseñas placeholder
 scripts/legacy-migration-map*.json
 scripts/legacy-users-report.json
-scripts/legacy-user-map.json
-scripts/legacy-user-accounts-report.json
+scripts/legacy-user-map*.json
+scripts/legacy-user-accounts-report*.json
 scripts/_prod-setup-result.json
