@@ -23,19 +23,20 @@ function UsageBar({
   used: number;
   limit: number;
 }) {
-  const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+  const rawPct = limit > 0 ? (used / limit) * 100 : 0;
+  const cappedPct = Math.min(100, rawPct);
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-sm">
         <span className="font-medium text-slate-700">{label}</span>
         <span className="text-slate-500">
-          {formatBytes(used)} / {formatBytes(limit)} ({pct.toFixed(1)}%)
+          {formatBytes(used)} / {formatBytes(limit)} ({rawPct.toFixed(1)}%)
         </span>
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
         <div
-          className={`h-full rounded-full ${barColor(pct)}`}
-          style={{ width: `${pct}%` }}
+          className={`h-full rounded-full ${barColor(rawPct)}`}
+          style={{ width: `${cappedPct}%` }}
         />
       </div>
     </div>
