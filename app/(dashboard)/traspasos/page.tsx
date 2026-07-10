@@ -177,24 +177,33 @@ export default async function TraspasosPage({
 
   // tab === "sol_env"
   const explicitPage = sp.page ? Math.max(1, Number(sp.page) || 1) : 1;
-  let query = supabase
-    .from("products")
-    .select("id, code, application, product_stock!inner(quantity)", { count: "exact" })
-    .eq("active", true)
-    .eq("product_stock.branch_id", branchId)
-    .order("created_at", { ascending: false });
-  if (sp.code) query = query.ilike("code", `%${escapePostgrestFilterValue(sp.code)}%`);
+  function buildProductsQuery(countOnly: boolean) {
+    let q = supabase
+      .from("products")
+      .select(
+        "id, code, application, product_stock!inner(quantity)",
+        countOnly ? { count: "exact", head: true } : undefined,
+      )
+      .eq("active", true)
+      .eq("product_stock.branch_id", branchId)
+      .order("created_at", { ascending: false });
+    if (sp.code) q = q.ilike("code", `%${escapePostgrestFilterValue(sp.code)}%`);
+    return q;
+  }
 
-  const { data, count } = await query.range(0, PAGE_SIZE * 200 - 1);
-  const allRows = (data ?? []) as unknown as {
+  const { count } = await buildProductsQuery(true);
+  const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
+  const page = clampPage(explicitPage, totalPages);
+  const { data } = await buildProductsQuery(false).range(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE - 1,
+  );
+  const rows = (data ?? []) as unknown as {
     id: string;
     code: string;
     application: string | null;
     product_stock: { quantity: number }[];
   }[];
-  const totalPages = Math.max(1, Math.ceil((count ?? allRows.length) / PAGE_SIZE));
-  const page = clampPage(explicitPage, totalPages);
-  const rows = allRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const products: TransferProduct[] = rows.map((r) => ({
     id: r.id,

@@ -4,6 +4,7 @@ import { requireNavAccess } from "@/lib/guard";
 import { getProfile } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { escapePostgrestFilterValue } from "@/lib/postgrest";
+import { clampPage } from "@/lib/ventasCart";
 import { SALE_TYPE_LABEL, type SaleType } from "@/lib/saleType";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -15,13 +16,19 @@ import { ReturnRowAction } from "@/components/devoluciones/ReturnRowAction";
 
 // Buscar ventas confirmadas y devolver (parcial o totalmente) sus líneas.
 // Ver docs/superpowers/specs/2026-07-02-devoluciones-design.md
-const RESULT_LIMIT = 2000;
+// Se pagina por VENTA (no por línea), igual que en Reporte de Ventas:
+// sales.created_at es una columna nativa de la tabla base, así que
+// .order()/.range() paginan de verdad en el servidor en vez de traer hasta
+// 2000 filas y recortar en JS (con el riesgo de que una venta con muchas
+// líneas quedara fuera del límite y no se pudiera devolver).
+const PAGE_SIZE = 100;
 
 type SearchParams = {
   q?: string;
   branchId?: string;
   from?: string;
   to?: string;
+  page?: string;
 };
 
 type SaleItemRow = {
@@ -30,16 +37,21 @@ type SaleItemRow = {
   quantity: number;
   subtotal_bs: number;
   products: { code: string } | null;
-  sales: {
-    created_at: string;
-    sale_type: string;
-    branches: { name: string } | null;
-    customers: { full_name: string; nit: string | null } | null;
-  } | null;
 };
 
-const SALE_ITEM_SELECT =
-  "id, unit_price_bs, quantity, subtotal_bs, products(code), sales!inner(created_at, sale_type, branch_id, branches(name), customers(full_name, nit))";
+type SaleRow = {
+  id: string;
+  created_at: string;
+  sale_type: string;
+  branches: { name: string } | null;
+  customers: { full_name: string; nit: string | null } | null;
+  sale_items: SaleItemRow[];
+};
+
+type DisplayRow = SaleItemRow & { sale: Omit<SaleRow, "sale_items"> };
+
+const SALE_SELECT =
+  "id, created_at, sale_type, branches(name), customers(full_name, nit), sale_items!inner(id, unit_price_bs, quantity, subtotal_bs, products(code))";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -65,6 +77,7 @@ export default async function DevolucionesPage({
 
   const from = sp.from || todayIso();
   const to = sp.to || todayIso();
+  const toEndOfDay = `${to}T23:59:59`;
 
   let matchingCustomerIds: string[] | null = null;
   if (sp.q) {
@@ -75,21 +88,59 @@ export default async function DevolucionesPage({
       .or(`full_name.ilike.%${q}%,nit.ilike.%${q}%`);
     matchingCustomerIds = (matchingCustomers ?? []).map((c) => c.id as string);
   }
+  const noMatches = matchingCustomerIds?.length === 0;
 
-  let query = supabase
-    .from("sale_items")
-    .select(SALE_ITEM_SELECT)
-    .gte("sales.created_at", from)
-    .lte("sales.created_at", `${to}T23:59:59`)
-    .order("id", { ascending: false })
-    .limit(RESULT_LIMIT);
+  function buildSalesQuery(countOnly: boolean) {
+    let q = supabase
+      .from("sales")
+      .select(SALE_SELECT, countOnly ? { count: "exact", head: true } : undefined)
+      .gte("created_at", from)
+      .lte("created_at", toEndOfDay)
+      .order("created_at", { ascending: false });
+    if (sp.branchId) q = q.eq("branch_id", sp.branchId);
+    if (matchingCustomerIds) q = q.in("customer_id", matchingCustomerIds);
+    return q;
+  }
 
-  if (sp.branchId) query = query.eq("sales.branch_id", sp.branchId);
-  if (matchingCustomerIds) query = query.in("sales.customer_id", matchingCustomerIds);
+  const explicitPage = sp.page ? Math.max(1, Number(sp.page) || 1) : 1;
+  let totalSales = 0;
+  let page = 1;
+  let salesRows: SaleRow[] = [];
+  if (!noMatches) {
+    const { count } = await buildSalesQuery(true);
+    totalSales = count ?? 0;
+    const totalPages = Math.max(1, Math.ceil(totalSales / PAGE_SIZE));
+    page = clampPage(explicitPage, totalPages);
+    const { data } = await buildSalesQuery(false).range(
+      (page - 1) * PAGE_SIZE,
+      page * PAGE_SIZE - 1,
+    );
+    salesRows = (data ?? []) as unknown as SaleRow[];
+  }
+  const totalPages = Math.max(1, Math.ceil(totalSales / PAGE_SIZE));
 
-  const { data } = matchingCustomerIds?.length === 0 ? { data: [] } : await query;
-  const rows = ((data ?? []) as unknown as SaleItemRow[]).filter((r) => r.sales !== null);
-  rows.sort((a, b) => (b.sales!.created_at < a.sales!.created_at ? -1 : 1));
+  const rows: DisplayRow[] = salesRows.flatMap((s) =>
+    s.sale_items.map((item) => ({
+      ...item,
+      sale: {
+        id: s.id,
+        created_at: s.created_at,
+        sale_type: s.sale_type,
+        branches: s.branches,
+        customers: s.customers,
+      },
+    })),
+  );
+
+  function buildHref(targetPage: number) {
+    const params = new URLSearchParams();
+    if (sp.q) params.set("q", sp.q);
+    if (sp.branchId) params.set("branchId", sp.branchId);
+    params.set("from", from);
+    params.set("to", to);
+    params.set("page", String(targetPage));
+    return `/devoluciones?${params.toString()}`;
+  }
 
   const saleItemIds = rows.map((r) => r.id);
   const returnedByItem = new Map<string, number>();
@@ -172,7 +223,7 @@ export default async function DevolucionesPage({
                   let band = 0;
                   let prevCreatedAt: string | null = null;
                   return rows.map((row) => {
-                    const createdAt = row.sales!.created_at;
+                    const createdAt = row.sale.created_at;
                     if (createdAt !== prevCreatedAt) {
                       band = 1 - band;
                       prevCreatedAt = createdAt;
@@ -181,13 +232,13 @@ export default async function DevolucionesPage({
                     const remaining = row.quantity - returned;
                     return (
                       <tr key={row.id} className={band === 0 ? "bg-emerald-100" : "bg-yellow-100"}>
-                        <td className="px-3 py-2">{row.sales!.branches?.name ?? "—"}</td>
+                        <td className="px-3 py-2">{row.sale.branches?.name ?? "—"}</td>
                         <td className="px-3 py-2 text-slate-500">{formatDateTime(createdAt)}</td>
                         <td className="px-3 py-2 text-slate-500">
-                          {SALE_TYPE_LABEL[row.sales!.sale_type as SaleType]}
+                          {SALE_TYPE_LABEL[row.sale.sale_type as SaleType]}
                         </td>
-                        <td className="px-3 py-2">{row.sales!.customers?.full_name ?? ""}</td>
-                        <td className="px-3 py-2 text-slate-500">{row.sales!.customers?.nit ?? "—"}</td>
+                        <td className="px-3 py-2">{row.sale.customers?.full_name ?? ""}</td>
+                        <td className="px-3 py-2 text-slate-500">{row.sale.customers?.nit ?? "—"}</td>
                         <td className="px-3 py-2 font-medium text-slate-800">{row.products?.code ?? "—"}</td>
                         <td className="px-3 py-2">{row.unit_price_bs}</td>
                         <td className="px-3 py-2">{row.quantity}</td>
@@ -212,6 +263,32 @@ export default async function DevolucionesPage({
           </>
         )}
       </Card>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-slate-500">
+          {page > 1 ? (
+            <ButtonLink variant="secondary" size="sm" href={buildHref(page - 1)}>
+              Anterior
+            </ButtonLink>
+          ) : (
+            <Button variant="secondary" size="sm" disabled>
+              Anterior
+            </Button>
+          )}
+          <span>
+            Página {page} de {totalPages} (por venta)
+          </span>
+          {page < totalPages ? (
+            <ButtonLink variant="secondary" size="sm" href={buildHref(page + 1)}>
+              Siguiente
+            </ButtonLink>
+          ) : (
+            <Button variant="secondary" size="sm" disabled>
+              Siguiente
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

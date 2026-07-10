@@ -7,11 +7,13 @@ import { requireNavAccess } from "@/lib/guard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { fieldInputClass } from "@/components/ui/Field";
 import { escapePostgrestFilterValue } from "@/lib/postgrest";
 import { NewCustomerForm } from "@/components/clientes/NewCustomerForm";
 import { DeleteCustomerButton } from "@/components/clientes/DeleteCustomerButton";
+
+const PAGE_SIZE = 50;
 
 type Customer = {
   id: string;
@@ -27,7 +29,7 @@ type Customer = {
 export default async function ClientesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; page?: string }>;
 }) {
   await requireNavAccess("clientes");
   const sp = await searchParams;
@@ -35,16 +37,27 @@ export default async function ClientesPage({
   const supabase = await createClient();
   const profile = await getProfile();
 
+  const page = Math.max(1, Number(sp.page) || 1);
   let query = supabase
     .from("customers")
-    .select("id, full_name, nit, email, phone, created_at")
-    .order("full_name");
+    .select("id, full_name, nit, email, phone, created_at", { count: "exact" })
+    .order("full_name")
+    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
   if (sp.q) {
     const q = escapePostgrestFilterValue(sp.q);
     query = query.or(`full_name.ilike.%${q}%,nit.ilike.%${q}%`);
   }
-  const { data } = await query;
+  const { data, count } = await query;
   const customers = (data ?? []) as Customer[];
+  const totalCustomers = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCustomers / PAGE_SIZE));
+
+  function buildHref(targetPage: number) {
+    const params = new URLSearchParams();
+    if (sp.q) params.set("q", sp.q);
+    params.set("page", String(targetPage));
+    return `/clientes?${params.toString()}`;
+  }
 
   const canDelete = can(profile?.role, "clientes:delete");
   const canCreate = can(profile?.role, "clientes:write");
@@ -53,7 +66,7 @@ export default async function ClientesPage({
     <div className="space-y-6">
       <PageHeader
         title="Clientes"
-        subtitle={`${customers.length} registrados`}
+        subtitle={`${totalCustomers} registrados`}
         action={canCreate ? <NewCustomerForm /> : null}
       />
 
@@ -102,6 +115,32 @@ export default async function ClientesPage({
           </ul>
         )}
       </Card>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-slate-500">
+          {page > 1 ? (
+            <ButtonLink variant="secondary" size="sm" href={buildHref(page - 1)}>
+              Anterior
+            </ButtonLink>
+          ) : (
+            <Button variant="secondary" size="sm" disabled>
+              Anterior
+            </Button>
+          )}
+          <span>
+            Página {page} de {totalPages}
+          </span>
+          {page < totalPages ? (
+            <ButtonLink variant="secondary" size="sm" href={buildHref(page + 1)}>
+              Siguiente
+            </ButtonLink>
+          ) : (
+            <Button variant="secondary" size="sm" disabled>
+              Siguiente
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

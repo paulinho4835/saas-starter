@@ -42,21 +42,22 @@ export default async function DashboardHome({
   const supabase = await createClient();
   const isAdmin = profile?.role === "admin";
 
-  const [{ count: clientes }, { data: topProductsData }, salesResult, capitalResult, lowStockResult] =
+  const sinceIso = since ? since.toISOString() : "1970-01-01T00:00:00Z";
+  const saleTypes = payment === "efectivo" ? EFECTIVO_TYPES : payment === "qr" ? QR_TYPES : null;
+
+  const [{ count: clientes }, { data: topProductsData }, salesSummaryResult, capitalResult, lowStockResult] =
     await Promise.all([
       supabase.from("customers").select("id", { count: "exact", head: true }),
       supabase.rpc("dashboard_top_products", {
         p_org_id: profile?.orgId ?? "",
-        p_since: since ? since.toISOString() : "1970-01-01T00:00:00Z",
+        p_since: sinceIso,
         p_limit: TOP_PRODUCTS_LIMIT,
       }),
-      (async () => {
-        let query = supabase.from("sales").select("total_bs");
-        if (since) query = query.gte("created_at", since.toISOString());
-        if (payment === "efectivo") query = query.in("sale_type", EFECTIVO_TYPES);
-        if (payment === "qr") query = query.in("sale_type", QR_TYPES);
-        return query;
-      })(),
+      supabase.rpc("dashboard_sales_summary", {
+        p_org_id: profile?.orgId ?? "",
+        p_since: sinceIso,
+        p_sale_types: saleTypes,
+      }),
       isAdmin
         ? supabase.rpc("dashboard_capital_by_branch", { p_org_id: profile?.orgId ?? "" })
         : Promise.resolve({ data: null }),
@@ -76,8 +77,11 @@ export default async function DashboardHome({
     quantity_sold: number;
     revenue_bs: number;
   }[];
-  const sales = salesResult.data ?? [];
-  const salesTotal = sales.reduce((sum, s) => sum + Number(s.total_bs), 0);
+  const salesSummary = (salesSummaryResult.data?.[0] ?? null) as
+    | { total_bs: number; sales_count: number }
+    | null;
+  const salesTotal = Number(salesSummary?.total_bs ?? 0);
+  const salesCount = Number(salesSummary?.sales_count ?? 0);
   const capitalByBranch = (capitalResult.data ?? null) as
     | { branch_id: string; branch_name: string; capital_bs: number }[]
     | null;
@@ -110,7 +114,7 @@ export default async function DashboardHome({
         />
         <Stat
           label={`Cantidad · ${PERIOD_LABEL[period] ?? PERIOD_LABEL["30d"]} · ${PAYMENT_FILTER_LABEL[payment] ?? PAYMENT_FILTER_LABEL.total}`}
-          value={sales.length}
+          value={salesCount}
           icon={<ShoppingCart className="h-5 w-5" />}
         />
         {isAdmin && (
